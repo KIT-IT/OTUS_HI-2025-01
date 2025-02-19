@@ -1,0 +1,17 @@
+#cloud-config
+users:
+  - name: sedunovsv
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDSfeZgM7WREDxkOSZBYLjUwOU0rq55wSsVipIr3FWLf <опциональный_комментарий>
+
+package_update: true
+package_upgrade: true
+packages:
+  - nginx
+runcmd:
+  - sudo echo "Hello Sedunovsv" > /var/www/html/index.html
+  - sudo systemctl start nginx
+  - sudo systemctl enable nginx
