@@ -1,0 +1,34 @@
+variable cloud_id {
+  description = "b1g6v5s594gnrffcntf6"
+}
+variable folder_id {
+  description = "b1g484bj5rqea9ljk25h"
+}
+variable zone {
+  description = "ru-central1-a"
+  # Значение по умолчанию
+  default = "ru-central1-a"
+}
+variable public_key_path {
+  # Описание переменной
+  description = "~/.ssh/ubuntu.pub"
+}
+variable private_key_path {
+  # Описание переменной
+  description = "~/.ssh/ubuntu"
+}
+variable image_id {
+  description = "fd8pdjeemi3e4akpq9vr"
+}
+variable subnet_id {
+  description = "e9bktie2ovbkhhvanvbo"
+}
+variable service_account_key_file {
+  description = "~/.ssh/appuser.json"
+}
+variable token {
+  description = "AgAAAAAMleioAATuwaoO9CNZNkPmoNgTWTrv5vQ"
+}
+variable "count_of_instance" {
+  default = 1
+}
