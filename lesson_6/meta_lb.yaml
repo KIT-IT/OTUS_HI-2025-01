@@ -1,0 +1,19 @@
+#cloud-config
+users:
+  - name: sedunovsv
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Установка Nginx
+package_update: true
+packages:
+  - nginx
+runcmd:
+  - systemctl restart nginx
+  - mkdir -p /var/www/html
+  - echo "<h1>Welcome to the Nginx Load Balancer!</h1>" > /var/www/html/index.html
+  - systemctl restart nginx
+  - systemctl enable nginx
