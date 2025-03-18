@@ -108,7 +108,7 @@ resource "yandex_compute_instance" "nginx_lb" {
   provisioner "remote-exec" {
     inline = [
       "until systemctl is-active nginx; do sleep 5; done",  # Ждать, пока Nginx не станет активным
-      "echo '${templatefile("${path.module}/nginx.conf.tpl", { backend_1_ip = yandex_compute_instance.nginx_backend_1.network_interface.0.ip_address, backend_2_ip = yandex_compute_instance.nginx_backend_2.network_interface.0.ip_address })}' | sudo tee /etc/nginx/nginx.conf",
+      "echo '${templatefile("${path.module}/nginx.conf.tpl", { backend_1_ip = yandex_compute_instance.nginx_backend_1.network_interface.0.ip_address, backend_2_ip = yandex_compute_instance.nginx_backend_2.network_interface.0.ip_address , backend_wordpress_ip = yandex_compute_instance.wordpress.network_interface[0].ip_address })}' | sudo tee /etc/nginx/nginx.conf",
       "sudo systemctl restart nginx",
     ]
   }
@@ -117,6 +117,34 @@ resource "yandex_compute_instance" "nginx_lb" {
     ignore_changes = [metadata]
   }
 }
+
+resource "yandex_compute_instance" "wordpress" {
+  name = "wordpress-instance"
+  zone = "ru-central1-a"
+
+  resources {
+    cores  = 2
+    memory = 2
+  }
+
+  boot_disk {
+    initialize_params {
+      image_id = "fd808e721rc1vt7jkd0o"
+    }
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet.id
+    nat       = true
+  }
+
+  metadata = {
+    user-data = templatefile("${path.module}/meta_wordpress.yaml", {
+      ssh_public_key = var.ssh_public_key
+    })
+  }
+}
+
 
 resource "yandex_vpc_network" "network" {
   name = "my-network"
