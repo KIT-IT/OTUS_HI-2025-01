@@ -1,0 +1,91 @@
+- hosts: all
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3  # Укажите путь к вашей версии Python
+#    mysql_root_password: ""    # Замените на ваш пароль
+
+  tasks:
+    - name: Установить необходимые пакеты
+      apt:
+        name:
+          - nginx
+          - mysql-server
+          - php-fpm
+          - php-mysql
+          - php-curl
+          - php-xml
+          - php-mbstring
+        state: present
+        update_cache: yes
+
+    - name: Запустить и включить Nginx и MySQL
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - nginx
+        - mysql
+
+    - name: Установить необходимые пакеты PIP
+      apt:
+        name:
+          - python3-pip
+          - libmysqlclient-dev
+          - pkg-config
+        state: present
+        update_cache: yes
+
+    - name: Установить mysqlclient
+      pip:
+        name: mysqlclient
+        state: present
+
+    - name: Создать пользователя MySQL wordpress
+      mysql_user:
+        name: wordpress
+        password: "wordpress"  # Установите пароль для пользователя
+        host: localhost
+        priv: "wordpress.*:ALL"
+        state: present
+
+    - name: Создать базу данных для WordPress
+      mysql_db:
+        name: wordpress
+        state: present
+        login_user: wordpress
+        login_password: "wordpress"
+
+    - name: Загрузить WordPress
+      get_url:
+        url: https://wordpress.org/latest.tar.gz
+        dest: /tmp/wordpress.tar.gz
+
+    - name: Распаковать WordPress
+      unarchive:
+        src: /tmp/wordpress.tar.gz
+        dest: /var/www/
+        remote_src: yes
+
+    - name: Настроить права доступа для WordPress
+      file:
+        path: /var/www/wordpress
+        owner: www-data
+        group: www-data
+        mode: '0755'
+        recurse: yes
+
+    - name: Заменить конфигурацию Nginx
+      copy:
+        src: ./wordpress_nginx.conf.j2  # Убедитесь, что файл nginx.conf находится в той же директории, что и ваш плейбук
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart nginx
+
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
