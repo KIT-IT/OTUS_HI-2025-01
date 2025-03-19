@@ -1,0 +1,17 @@
+#cloud-config
+users:
+  - name: sedunovsv
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Установка Docker
+package_update: true
+packages:
+  - docker.io
+runcmd:
+  - systemctl start docker
+  - systemctl enable docker
+  - docker run -d -p 8000:8080 -e APP_DELAY=0 -e APP_BGCOLOR=white vscoder/webdebugger
