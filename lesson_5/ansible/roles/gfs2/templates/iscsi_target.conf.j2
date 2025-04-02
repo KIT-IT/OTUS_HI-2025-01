@@ -1,0 +1,8 @@
+<target {{ iscsi_iqn }}>
+    backing-store {{ disk_device }}
+    {% if iscsi_chap_auth %}
+    incominguser {{ iscsi_chap_user }} {{ iscsi_chap_password }}
+    {% else %}
+    initiator-address ALL
+    {% endif %}
+</target>

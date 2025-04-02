@@ -1,0 +1,67 @@
+---
+- name: Install GFS2 utilities
+  apt:
+    name: gfs2-utils
+    state: present
+
+- name: Create mount point
+  file:
+    path: "{{ gfs2_mount_point }}"
+    state: directory
+    mode: '0777'
+
+- name: Format GFS2 filesystem (only on first client)
+  block:
+    - name: Check if filesystem already exists
+      command: blkid -o value -s TYPE "/dev/{{ volume_group }}/{{ logical_volume }}"
+      register: fs_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Format GFS2 (if needed)
+      command: |
+        mkfs.gfs2 -j {{ gfs2_journals }} -p lock_dlm -t "{{ gfs2_cluster_name }}:gfs2_lock" \
+        "/dev/{{ volume_group }}/{{ logical_volume }}"
+      when: 
+        - inventory_hostname == "gfs2-client-0"
+        - fs_check.rc != 0 or fs_check.stdout != "gfs2"
+      register: mkfs
+      async: 300  # Максимальное время выполнения (5 минут)
+      poll: 10    # Проверять каждые 10 секунд
+      timeout: 300 # Таймаут 5 минут
+
+    - name: Verify GFS2 creation
+      command: blkid -o value -s TYPE "/dev/{{ volume_group }}/{{ logical_volume }}"
+      register: fs_verify
+      changed_when: false
+      when: inventory_hostname == "gfs2-client-0"
+
+    - name: Fail if formatting not completed
+      fail:
+        msg: "GFS2 filesystem was not created properly on {{ inventory_hostname }}"
+      when:
+        - inventory_hostname == "gfs2-client-0"
+        - fs_verify.rc != 0 or fs_verify.stdout != "gfs2"
+  when: inventory_hostname == "gfs2-client-0"
+
+- name: Add to fstab
+  lineinfile:
+    path: /etc/fstab
+    line: "/dev/{{ volume_group }}/{{ logical_volume }} {{ gfs2_mount_point }} gfs2 defaults,noatime 0 0"
+    state: present
+
+- name: Mount GFS2
+  mount:
+    path: "{{ gfs2_mount_point }}"
+    src: "/dev/{{ volume_group }}/{{ logical_volume }}"
+    fstype: "gfs2"
+    state: mounted
+    opts: "defaults,noatime"
+
+- name: Verify GFS2
+  command: mount | grep gfs2
+  register: gfs2_mount
+  changed_when: false
+
+- debug:
+    var: gfs2_mount.stdout

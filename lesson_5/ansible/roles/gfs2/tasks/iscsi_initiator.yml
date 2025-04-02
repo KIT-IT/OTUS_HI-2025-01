@@ -1,0 +1,100 @@
+---
+- name: Install iSCSI initiator packages
+  apt:
+    name: open-iscsi
+    state: present
+    update_cache: yes
+
+- name: Configure initiator name
+  lineinfile:
+    path: /etc/iscsi/initiatorname.iscsi
+    line: "InitiatorName={{ client_iqn_prefix }}{{ inventory_hostname[-1] }}"
+    regexp: "^InitiatorName="
+    state: present
+
+- name: Restart iscsi service
+  systemd:
+    name: open-iscsi
+    state: restarted
+    enabled: yes
+
+- name: Clean old iSCSI configuration
+  block:
+    - name: Logout from all sessions
+      command: iscsiadm -m node --logoutall=all
+      ignore_errors: yes
+    
+    - name: Delete old nodes
+      command: iscsiadm -m node -o delete -T {{ iscsi_iqn }}
+      ignore_errors: yes
+  tags: cleanup
+
+- name: Manually create iSCSI node if discovery fails
+  block:
+    - name: Discover iSCSI target
+      command: iscsiadm -m discovery -t st -p {{ hostvars[iscsi_target].ansible_host }}
+      register: discovery
+      ignore_errors: yes
+      changed_when: discovery.rc == 0
+
+    - name: Manually create node if discovery failed
+      command: iscsiadm -m node -T {{ iscsi_iqn }} -p {{ hostvars[iscsi_target].ansible_host }}:3260 -o new
+      when: discovery.rc != 0
+      register: manual_node
+      changed_when: manual_node.rc == 0
+  tags: discovery
+
+- name: Debug - Show current nodes
+  command: iscsiadm -m node
+  register: current_nodes
+  changed_when: false
+  tags: debug
+
+- debug:
+    var: current_nodes.stdout
+  tags: debug
+
+- name: Configure CHAP authentication
+  block:
+    - name: Verify node exists
+      command: iscsiadm -m node -T {{ iscsi_iqn }}
+      register: node_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Set auth method (if node exists)
+      command: iscsiadm -m node -T {{ iscsi_iqn }} -p {{ hostvars[iscsi_target].ansible_host }}:3260 --op update -n node.session.auth.authmethod -v CHAP
+      when: node_check.rc == 0
+      register: set_auth
+      retries: 3
+      delay: 2
+
+    - name: Set username (if node exists)
+      command: iscsiadm -m node -T {{ iscsi_iqn }} -p {{ hostvars[iscsi_target].ansible_host }}:3260 --op update -n node.session.auth.username -v {{ iscsi_chap_user }}
+      when: node_check.rc == 0
+      register: set_user
+
+    - name: Set password (if node exists)
+      command: iscsiadm -m node -T {{ iscsi_iqn }} -p {{ hostvars[iscsi_target].ansible_host }}:3260 --op update -n node.session.auth.password -v {{ iscsi_chap_password }}
+      when: node_check.rc == 0
+      register: set_pass
+  when: iscsi_chap_auth | bool
+  tags: chap
+
+- name: Login to iSCSI target
+  block:
+    - name: Perform login
+      command: iscsiadm -m node -T {{ iscsi_iqn }} -p {{ hostvars[iscsi_target].ansible_host }}:3260 -l
+      register: login
+      retries: 5
+      delay: 3
+      until: login.rc == 0
+
+    - name: Verify session
+      command: iscsiadm -m session
+      register: session
+      changed_when: false
+
+    - debug:
+        var: session.stdout
+  tags: login
