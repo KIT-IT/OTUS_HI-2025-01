@@ -1,0 +1,3 @@
+---
+- name: Save iSCSI target config
+  command: tgt-admin --dump > /etc/tgt/conf.d/iscsi.conf

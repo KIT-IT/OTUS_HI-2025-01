@@ -1,0 +1,9 @@
+---
+# Общие переменные для всех хостов
+disk_name: "vdb"
+disk_device: "/dev/vdb"
+
+# GFS2 Settings
+gfs2_mount_point: "/mnt/gfs2_shared"  # Путь для монтирования GFS2
+volume_group: "vg_shared"
+logical_volume: "lv_shared"
