@@ -1,0 +1,107 @@
+---
+- name: Install LVM2 package
+  apt:
+    name: lvm2
+    state: present
+
+- name: Check if disk exists
+  stat:
+    path: "{{ disk_device }}"
+  register: disk_stat
+
+- name: Fail if disk not found
+  fail:
+    msg: "Disk {{ disk_device }} not found!"
+  when: not disk_stat.stat.exists
+
+- name: Check if physical volume already exists
+  command: pvdisplay {{ disk_device }}
+  register: pv_exist_check
+  ignore_errors: yes
+  changed_when: false
+
+- name: Create physical volume (only if not exists)
+  command: pvcreate -ff {{ disk_device }}
+  when: 
+    - disk_stat.stat.exists
+    - pv_exist_check.rc != 0
+  register: pv_create
+  retries: 2
+  delay: 3
+  until: pv_create.rc == 0
+  changed_when: pv_create.rc == 0
+
+- name: Skip PV creation (already exists)
+  debug:
+    msg: "Physical volume {{ disk_device }} already exists, skipping creation"
+  when: 
+    - disk_stat.stat.exists
+    - pv_exist_check.rc == 0
+  changed_when: false
+
+- name: Check if volume group already exists
+  command: vgdisplay {{ volume_group }}
+  register: vg_exist_check
+  ignore_errors: yes
+  changed_when: false
+
+- name: Create volume group (only if not exists)
+  command: vgcreate {{ volume_group }} {{ disk_device }}
+  when: 
+    - disk_stat.stat.exists
+    - vg_exist_check.rc != 0
+  register: vg_create
+  changed_when: vg_create.rc == 0
+
+- name: Skip VG creation (already exists)
+  debug:
+    msg: "Volume group '{{ volume_group }}' already exists, skipping creation"
+  when: 
+    - disk_stat.stat.exists
+    - vg_exist_check.rc == 0
+  changed_when: false
+
+- name: Check available space in VG
+  command: vgs --noheadings -o vg_free "{{ volume_group }}"
+  register: vg_free_check
+  changed_when: false
+  ignore_errors: yes
+
+- name: Verify if LV already exists
+  command: lvdisplay "/dev/{{ volume_group }}/{{ logical_volume }}"
+  register: lv_exist_check
+  changed_when: false
+  ignore_errors: yes
+
+- name: Create logical volume (if space available)
+  command: lvcreate -l 100%FREE -n "{{ logical_volume }}" "{{ volume_group }}"
+  when:
+    - vg_free_check.rc == 0
+    - vg_free_check.stdout | float > 0
+    - lv_exist_check.rc != 0
+  register: lv_create
+  retries: 2
+  delay: 3
+
+- name: Skip LV creation (already exists)
+  debug:
+    msg: "Logical volume '{{ logical_volume }}' already exists in '{{ volume_group }}', skipping creation"
+  when:
+    - lv_exist_check.rc == 0
+  changed_when: false
+
+- name: Fail if no space in VG
+  fail:
+    msg: "No free space available in volume group '{{ volume_group }}' for logical volume"
+  when:
+    - vg_free_check.rc == 0
+    - vg_free_check.stdout | float <= 0
+    - lv_exist_check.rc != 0
+
+- name: Verify LVM configuration
+  command: vgs
+  register: vgs_output
+  changed_when: false
+
+- debug:
+    var: vgs_output.stdout

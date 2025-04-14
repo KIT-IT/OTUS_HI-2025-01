@@ -1,0 +1,21 @@
+---
+- name: Configure iSCSI and GFS2 cluster
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - gfs2
+
+- name: Final GFS2 mount on all clients
+  hosts: clients
+  become: yes
+  tasks:
+    - name: Mount GFS2 on remaining clients
+      mount:
+        path: "{{ gfs2_mount_point }}"
+        src: "/dev/{{ volume_group }}/{{ logical_volume }}"
+        fstype: "gfs2"
+        state: mounted
+        opts: "defaults,noatime"
+      when: inventory_hostname != "gfs2-client-0"

@@ -1,0 +1,18 @@
+---
+- name: Verify disk configuration
+  hosts: all
+  tasks:
+    - name: Check disk presence
+      stat:
+        path: "{{ disk_device }}"
+      register: disk_check
+
+    - name: Show disk info
+      command: lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
+      when: disk_check.stat.exists
+      changed_when: false
+
+    - name: Fail if disk not found
+      fail:
+        msg: "Disk {{ disk_device }} not found on {{ inventory_hostname }}"
+      when: not disk_check.stat.exists

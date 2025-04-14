@@ -1,0 +1,20 @@
+---
+- name: Verify disks attachment
+  hosts: all
+  tasks:
+    - name: Check secondary disks
+      ansible.builtin.shell: |
+        lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT | grep -v 'boot\|root\|disk' | grep '^sd\|^vd' | wc -l
+      register: disk_count
+      changed_when: false
+
+    - name: Show disk info
+      ansible.builtin.shell: lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
+      changed_when: false
+
+    - name: Verify disk attachment
+      ansible.builtin.assert:
+        that:
+          - disk_count.stdout == "1"
+        success_msg: "Secondary disk is properly attached"
+        fail_msg: "Secondary disk is NOT attached"

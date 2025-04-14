@@ -1,0 +1,18 @@
+---
+# iSCSI settings
+iscsi_target: "iscsi-server"
+iscsi_iqn: "iqn.2023-08.com.example:shared"
+client_iqn_prefix: "iqn.2023-08.com.example:client"
+
+# LVM settings
+volume_group: "vg_shared"
+logical_volume: "lv_shared"
+
+# GFS2 settings
+gfs2_mount_point: "/mnt/gfs2_shared"
+gfs2_cluster_name: "gfs2_cluster"
+
+# CHAP authentication
+iscsi_chap_auth: true
+iscsi_chap_user: "user"
+iscsi_chap_password: "password"
