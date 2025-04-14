@@ -1,0 +1,12 @@
+[Unit]
+Description=GFS2 Shared Filesystem
+After=network.target
+
+[Mount]
+What=/dev/{{ volume_group }}/{{ logical_volume }}
+Where={{ gfs2_mount_point }}
+Type=gfs2
+Options=defaults,noatime
+
+[Install]
+WantedBy=multi-user.target

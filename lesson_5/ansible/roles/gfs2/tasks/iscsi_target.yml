@@ -1,0 +1,39 @@
+---
+- name: Install iSCSI target packages
+  apt:
+    name: tgt
+    state: present
+    update_cache: yes
+
+- name: Ensure tgt service is running
+  systemd:
+    name: tgt
+    state: started
+    enabled: yes
+
+- name: Clean existing target configuration
+  command: tgtadm --lld iscsi --mode target --op delete --tid 1
+  ignore_errors: yes
+  register: clean_target
+  changed_when: clean_target.rc == 0
+
+- name: Create iSCSI target configuration file
+  template:
+    src: iscsi_target.conf.j2
+    dest: /etc/tgt/conf.d/iscsi.conf
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Reload tgt service
+  systemd:
+    name: tgt
+    state: reloaded
+
+- name: Verify target status
+  command: tgtadm --lld iscsi --mode target --op show
+  register: target_status
+  changed_when: false
+
+- debug:
+    var: target_status.stdout

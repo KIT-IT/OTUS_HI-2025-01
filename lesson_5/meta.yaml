@@ -1,0 +1,11 @@
+#cloud-config
+users:
+  - name: sedunovsv
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Установка Nginx
+package_update: true
