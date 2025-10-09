@@ -22,8 +22,8 @@ def site_view(request):
 </head>
 <body>
     <div class="container">
-        <h1>🚀 Django Site</h1>
-        <div class="status">✅ Online</div>
+        <h1> Django Site</h1>
+        <div class="status"> Online</div>
         
         <div class="info">
             <div class="info-item">
