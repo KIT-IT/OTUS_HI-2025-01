@@ -1,0 +1,8 @@
+---
+- name: Настройка PostgreSQL Database сервера
+  hosts: database_servers
+  become: yes
+  roles:
+    - database
+  vars:
+    ansible_python_interpreter: /usr/bin/python3

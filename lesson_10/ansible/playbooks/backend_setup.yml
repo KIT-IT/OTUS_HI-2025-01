@@ -1,0 +1,303 @@
+---
+- name: Настройка Backend серверов с Django + PostgreSQL
+  hosts: backend_servers
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    django_project_name: "myproject"
+    django_app_name: "api"
+    django_user: "django"
+    django_group: "django"
+    django_home: "/opt/django"
+    postgres_db: "django_db"
+    postgres_user: "django_user"
+    postgres_password: "django_password"
+    uwsgi_port: 8001
+    nginx_backend_port: 80
+
+  tasks:
+    - name: Обновить кэш пакетов
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Установить системные пакеты
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-venv
+          - python3-dev
+          - libpq-dev
+          - nginx
+          - git
+          - curl
+          - supervisor
+        state: present
+        update_cache: yes
+
+    - name: Установить Python пакеты через pip
+      pip:
+        name:
+          - uwsgi
+          - psycopg2-binary
+        state: present
+
+    - name: Создать группу Django
+      group:
+        name: "{{ django_group }}"
+        state: present
+
+    - name: Создать пользователя Django
+      user:
+        name: "{{ django_user }}"
+        group: "{{ django_group }}"
+        home: "{{ django_home }}"
+        shell: /bin/bash
+        create_home: yes
+
+    - name: Создать директории для Django
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        mode: '0755'
+      loop:
+        - "{{ django_home }}"
+        - "{{ django_home }}/{{ django_project_name }}"
+        - "{{ django_home }}/logs"
+        - "{{ django_home }}/static"
+        - "{{ django_home }}/media"
+        - /var/log/uwsgi
+
+    - name: Настроить PostgreSQL пользователя (на БД-сервере)
+      postgresql_user:
+        name: "{{ postgres_user }}"
+        password: "{{ postgres_password }}"
+        state: present
+        login_user: postgres
+        login_unix_socket: "/var/run/postgresql"
+      delegate_to: database
+      run_once: true
+
+    - name: Создать базу данных Django (на БД-сервере)
+      postgresql_db:
+        name: "{{ postgres_db }}"
+        owner: "{{ postgres_user }}"
+        state: present
+        login_user: postgres
+        login_unix_socket: "/var/run/postgresql"
+      delegate_to: database
+      run_once: true
+
+    - name: Настроить PostgreSQL для Django (на БД-сервере)
+      postgresql_pg_hba:
+        dest: /etc/postgresql/12/main/pg_hba.conf
+        backup: yes
+        create: yes
+        contype: host
+        databases: "{{ postgres_db }}"
+        users: "{{ postgres_user }}"
+        source: 0.0.0.0/0
+        method: md5
+      delegate_to: database
+      run_once: true
+
+    - name: Перезапустить PostgreSQL (на БД-сервере)
+      systemd:
+        name: postgresql
+        state: restarted
+      delegate_to: database
+      run_once: true
+
+    - name: Создать виртуальное окружение Python
+      pip:
+        name: virtualenv
+        state: present
+
+    - name: Создать виртуальное окружение для Django
+      command: python3 -m venv {{ django_home }}/venv
+      args:
+        creates: "{{ django_home }}/venv/bin/activate"
+
+    - name: Установить Python пакеты в виртуальное окружение
+      pip:
+        name:
+          - django
+          - djangorestframework
+          - psycopg2-binary
+          - uwsgi
+          - django-cors-headers
+          - pillow
+        virtualenv: "{{ django_home }}/venv"
+        state: present
+
+    - name: Создать Django проект
+      command: "{{ django_home }}/venv/bin/django-admin startproject {{ django_project_name }} {{ django_home }}/{{ django_project_name }}"
+      args:
+        creates: "{{ django_home }}/{{ django_project_name }}/manage.py"
+
+    - name: Создать Django приложение
+      command: "{{ django_home }}/venv/bin/python manage.py startapp {{ django_app_name }}"
+      args:
+        chdir: "{{ django_home }}/{{ django_project_name }}"
+        creates: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/models.py"
+
+    - name: Настроить права доступа для Django
+      file:
+        path: "{{ django_home }}"
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        recurse: yes
+        mode: '0755'
+
+    - name: Создать конфигурацию Django settings
+      template:
+        src: ../roles/backend/templates/django_settings.py.j2
+        dest: "{{ django_home }}/{{ django_project_name }}/{{ django_project_name }}/settings.py"
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        mode: '0644'
+
+    - name: Создать конфигурацию Django urls
+      template:
+        src: ../roles/backend/templates/django_urls.py.j2
+        dest: "{{ django_home }}/{{ django_project_name }}/{{ django_project_name }}/urls.py"
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        mode: '0644'
+
+    - name: Создать API views
+      template:
+        src: ../roles/backend/templates/django_views.py.j2
+        dest: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/views.py"
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        mode: '0644'
+
+    - name: Создать API urls
+      template:
+        src: ../roles/backend/templates/django_api_urls.py.j2
+        dest: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/urls.py"
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        mode: '0644'
+
+    - name: Создать модели Django
+      template:
+        src: ../roles/backend/templates/django_models.py.j2
+        dest: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/models.py"
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        mode: '0644'
+
+    - name: Создать сериализаторы Django
+      template:
+        src: ../roles/backend/templates/django_serializers.py.j2
+        dest: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/serializers.py"
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        mode: '0644'
+
+    - name: Создать конфигурацию UWSGI
+      template:
+        src: ../roles/backend/templates/uwsgi.ini.j2
+        dest: "{{ django_home }}/uwsgi.ini"
+        owner: "{{ django_user }}"
+        group: "{{ django_group }}"
+        mode: '0644'
+
+    - name: Создать systemd сервис для UWSGI
+      template:
+        src: ../roles/backend/templates/uwsgi.service.j2
+        dest: /etc/systemd/system/uwsgi-django.service
+        mode: '0644'
+      notify: reload systemd
+
+    - name: Создать конфигурацию Nginx для backend
+      template:
+        src: ../roles/backend/templates/nginx_backend.conf.j2
+        dest: /etc/nginx/sites-available/django-backend
+        mode: '0644'
+      notify: restart nginx
+
+    - name: Активировать сайт Nginx
+      file:
+        src: /etc/nginx/sites-available/django-backend
+        dest: /etc/nginx/sites-enabled/django-backend
+        state: link
+      notify: restart nginx
+
+    - name: Удалить дефолтный сайт Nginx
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: restart nginx
+
+    - name: Выполнить миграции Django
+      shell: "sudo -u {{ django_user }} {{ django_home }}/venv/bin/python manage.py migrate"
+      args:
+        chdir: "{{ django_home }}/{{ django_project_name }}"
+
+    - name: Создать суперпользователя Django
+      shell: "sudo -u {{ django_user }} DJANGO_SUPERUSER_PASSWORD=admin123 {{ django_home }}/venv/bin/python manage.py createsuperuser --noinput --username admin --email admin@example.com || true"
+      args:
+        chdir: "{{ django_home }}/{{ django_project_name }}"
+
+    - name: Собрать статические файлы Django
+      shell: "sudo -u {{ django_user }} {{ django_home }}/venv/bin/python manage.py collectstatic --noinput"
+      args:
+        chdir: "{{ django_home }}/{{ django_project_name }}"
+
+    - name: Включить и запустить сервисы
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - postgresql
+        - uwsgi-django
+        - nginx
+
+    - name: Проверить статус сервисов
+      systemd:
+        name: "{{ item }}"
+      register: service_status
+      loop:
+        - postgresql
+        - uwsgi-django
+        - nginx
+
+    - name: Показать статус сервисов
+      debug:
+        msg: "{{ item.item }} is {{ 'running' if item.status.ActiveState == 'active' else 'not running' }}"
+      loop: "{{ service_status.results }}"
+
+    - name: Показать информацию о backend сервере
+      debug:
+        msg: |
+          Backend Server: {{ inventory_hostname }}
+          Django Project: {{ django_project_name }}
+          Database: {{ postgres_db }}
+          UWSGI Port: {{ uwsgi_port }}
+          Nginx Port: {{ nginx_backend_port }}
+          API Endpoints:
+            - http://{{ ansible_default_ipv4.address }}/api/
+            - http://{{ ansible_default_ipv4.address }}/api/health/
+            - http://{{ ansible_default_ipv4.address }}/api/items/
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+    - name: restart uwsgi
+      systemd:
+        name: uwsgi-django
+        state: restarted

@@ -1,0 +1,232 @@
+---
+- name: Обновить кэш пакетов
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Установить системные пакеты
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-dev
+      - libpq-dev
+      - build-essential
+      - nginx
+    state: present
+
+
+- name: Создать виртуальное окружение Python для Django
+  command: python3 -m venv {{ django_home }}/venv
+  args:
+    creates: "{{ django_home }}/venv/bin/activate"
+  become: yes
+  become_user: "{{ django_user }}"
+
+- name: Установить Python пакеты во внутренний venv
+  pip:
+    name:
+      - django
+      - djangorestframework
+      - django-cors-headers
+      - psycopg2-binary
+      - uwsgi
+    virtualenv: "{{ django_home }}/venv"
+    state: present
+
+- name: Создать группу Django
+  group:
+    name: "{{ django_group }}"
+    state: present
+
+- name: Создать пользователя Django
+  user:
+    name: "{{ django_user }}"
+    group: "{{ django_group }}"
+    system: yes
+    shell: /bin/bash
+    home: "{{ django_home }}"
+    create_home: yes
+
+- name: Создать директории для Django
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    mode: '0755'
+  loop:
+    - "{{ django_home }}"
+    - "{{ django_home }}/{{ django_project_name }}"
+    - "{{ django_home }}/logs"
+    - "{{ django_home }}/static"
+    - "{{ django_home }}/media"
+    - "/var/log/uwsgi"
+
+- name: Создать Django проект
+  command: "{{ django_home }}/venv/bin/django-admin startproject {{ django_project_name }} {{ django_home }}/{{ django_project_name }}"
+  args:
+    creates: "{{ django_home }}/{{ django_project_name }}/manage.py"
+  become: yes
+  become_user: "{{ django_user }}"
+
+- name: Создать Django приложение
+  command: "{{ django_home }}/venv/bin/python manage.py startapp {{ django_app_name }}"
+  args:
+    chdir: "{{ django_home }}/{{ django_project_name }}"
+    creates: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/models.py"
+  become: yes
+  become_user: "{{ django_user }}"
+
+- name: Настроить права доступа для Django
+  file:
+    path: "{{ django_home }}/{{ django_project_name }}"
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    recurse: yes
+
+- name: Создать простую конфигурацию Django settings
+  template:
+    src: django_settings.py.j2
+    dest: "{{ django_home }}/{{ django_project_name }}/{{ django_project_name }}/settings.py"
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    mode: '0644'
+
+- name: Создать простые views
+  template:
+    src: django_views.py.j2
+    dest: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/views.py"
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    mode: '0644'
+
+- name: Создать URLs
+  template:
+    src: django_urls.py.j2
+    dest: "{{ django_home }}/{{ django_project_name }}/{{ django_project_name }}/urls.py"
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    mode: '0644'
+
+- name: Создать API URLs
+  template:
+    src: django_api_urls.py.j2
+    dest: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/urls.py"
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    mode: '0644'
+
+- name: Создать модели
+  template:
+    src: django_models.py.j2
+    dest: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/models.py"
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    mode: '0644'
+
+- name: Создать сериализаторы
+  template:
+    src: django_serializers.py.j2
+    dest: "{{ django_home }}/{{ django_project_name }}/{{ django_app_name }}/serializers.py"
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    mode: '0644'
+
+- name: Создать конфигурацию UWSGI
+  template:
+    src: uwsgi.ini.j2
+    dest: "{{ django_home }}/uwsgi.ini"
+    owner: "{{ django_user }}"
+    group: "{{ django_group }}"
+    mode: '0644'
+
+- name: Создать systemd сервис для UWSGI
+  template:
+    src: uwsgi.service.j2
+    dest: /etc/systemd/system/uwsgi-django.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart uwsgi-django
+
+- name: Создать конфигурацию Nginx для backend
+  template:
+    src: nginx_backend.conf.j2
+    dest: /etc/nginx/sites-available/django-backend
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart nginx
+
+- name: Активировать сайт Nginx
+  file:
+    src: /etc/nginx/sites-available/django-backend
+    dest: /etc/nginx/sites-enabled/django-backend
+    state: link
+  notify: restart nginx
+
+- name: Удалить дефолтный сайт Nginx
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: restart nginx
+
+- name: Выполнить миграции Django
+  command: "{{ django_home }}/venv/bin/python manage.py migrate"
+  args:
+    chdir: "{{ django_home }}/{{ django_project_name }}"
+  become: yes
+  become_user: "{{ django_user }}"
+
+- name: Создать суперпользователя Django
+  command: "{{ django_home }}/venv/bin/python manage.py createsuperuser --noinput --username admin --email admin@example.com"
+  args:
+    chdir: "{{ django_home }}/{{ django_project_name }}"
+  ignore_errors: yes
+  become: yes
+  become_user: "{{ django_user }}"
+
+- name: Собрать статические файлы Django
+  command: "{{ django_home }}/venv/bin/python manage.py collectstatic --noinput"
+  args:
+    chdir: "{{ django_home }}/{{ django_project_name }}"
+  become: yes
+  become_user: "{{ django_user }}"
+
+- name: Включить и запустить сервисы
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+    - uwsgi-django
+    - nginx
+
+- name: Проверить статус сервисов
+  systemd:
+    name: "{{ item }}"
+  register: service_status
+  loop:
+    - uwsgi-django
+    - nginx
+
+- name: Показать статус сервисов
+  debug:
+    msg: "{{ item.name }} is {{ 'running' if item.status.ActiveState == 'active' else 'not running' }}"
+  loop: "{{ service_status.results }}"
+
+- name: Показать информацию о backend сервере
+  debug:
+    msg: |
+      Backend Server: {{ inventory_hostname }}
+      Django Project: {{ django_project_name }}
+      UWSGI Port: {{ uwsgi_port }}
+      Nginx Port: {{ nginx_backend_port }}
+      API Endpoints:
+        - http://{{ ansible_default_ipv4.address }}/api/
+        - http://{{ ansible_default_ipv4.address }}/api/health/
+        - http://{{ ansible_default_ipv4.address }}/api/items/

@@ -1,0 +1,84 @@
+---
+- name: Настройка Nginx на серверах балансировки
+  hosts: nginx_servers
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    nginx_worker_processes: auto
+    nginx_worker_connections: 1024
+    backend_servers:
+      - "{{ hostvars['backend-1']['ansible_host'] }}:8000"
+      - "{{ hostvars['backend-2']['ansible_host'] }}:8000"
+
+  tasks:
+    - name: Обновить кэш пакетов
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Установить Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Создать директорию для конфигурации Nginx
+      file:
+        path: /etc/nginx/conf.d
+        state: directory
+        mode: '0755'
+
+    - name: Создать директорию для логов
+      file:
+        path: /var/log/nginx
+        state: directory
+        mode: '0755'
+
+    - name: Настроить конфигурацию Nginx
+      template:
+        src: nginx_balancer.conf.j2
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart nginx
+
+    - name: Создать тестовую страницу
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Nginx Server {{ inventory_hostname }}</title>
+          </head>
+          <body>
+              <h1>Welcome to {{ inventory_hostname }}</h1>
+              <p>This is Nginx server for load balancing</p>
+              <p>Server: {{ inventory_hostname }}</p>
+              <p>IP: {{ ansible_default_ipv4.address }}</p>
+          </body>
+          </html>
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Включить и запустить Nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Проверить статус Nginx
+      systemd:
+        name: nginx
+      register: nginx_status
+
+    - name: Показать статус Nginx
+      debug:
+        msg: "Nginx is {{ 'running' if nginx_status.status.ActiveState == 'active' else 'not running' }}"
+
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted

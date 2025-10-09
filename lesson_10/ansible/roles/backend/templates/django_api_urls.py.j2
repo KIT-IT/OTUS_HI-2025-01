@@ -1,0 +1,14 @@
+"""
+URL configuration for {{ django_app_name }} API.
+"""
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.api_info, name='api_info'),
+    path('health/', views.health_check, name='health_check'),
+    path('server/', views.ServerInfoView.as_view(), name='server_info'),
+    path('items/', views.ItemListCreateView.as_view(), name='item_list_create'),
+    path('items/<int:pk>/', views.ItemDetailView.as_view(), name='item_detail'),
+    path('site/', views.site_view, name='site_view'),
+]

@@ -1,0 +1,5 @@
+---
+nginx_worker_processes: auto
+nginx_worker_connections: 1024
+django_backend_port: 8001
+docker_backend_port: 8000

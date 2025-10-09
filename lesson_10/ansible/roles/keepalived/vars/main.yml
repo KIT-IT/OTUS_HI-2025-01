@@ -1,0 +1,5 @@
+---
+keepalived_priority_master: 100
+keepalived_priority_backup: 90
+virtual_ip: "192.168.10.100"
+virtual_router_id: 51
