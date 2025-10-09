@@ -1,0 +1,91 @@
+events {
+    worker_connections 1024;
+}
+
+http {
+    # Upstream для Django/UWSGI (порт {{ django_backend_port }})
+    upstream django_backend {
+        server {{ hostvars['backend-1']['ansible_host'] }}:{{ django_backend_port }}; # IP бэкенда 1 (Django/UWSGI)
+        server {{ hostvars['backend-2']['ansible_host'] }}:{{ django_backend_port }}; # IP бэкенда 2 (Django/UWSGI)
+    }
+
+    # Upstream для Docker (порт {{ docker_backend_port }})
+    upstream docker_backend {
+        server {{ hostvars['backend-1']['ansible_host'] }}:{{ docker_backend_port }}; # IP бэкенда 1 (Docker)
+        server {{ hostvars['backend-2']['ansible_host'] }}:{{ docker_backend_port }}; # IP бэкенда 2 (Docker)
+    }
+
+    # Основной сервер
+    server {
+        listen 80;
+        server_name _;
+
+        # Статический контент
+        location / {
+            root /var/www/html;
+            index index.html;
+        }
+
+        # API Django (порт {{ django_backend_port }})
+        location /api/ {
+            include uwsgi_params;
+            uwsgi_pass django_backend;
+            uwsgi_read_timeout 300;
+            uwsgi_connect_timeout 300;
+            uwsgi_send_timeout 300;
+        }
+
+        # Django Site (порт {{ django_backend_port }})
+        location /site/ {
+            include uwsgi_params;
+            uwsgi_pass django_backend;
+            uwsgi_read_timeout 300;
+            uwsgi_connect_timeout 300;
+            uwsgi_send_timeout 300;
+        }
+
+        # Django Admin (порт {{ django_backend_port }})
+        location /admin/ {
+            include uwsgi_params;
+            uwsgi_pass django_backend;
+            uwsgi_read_timeout 300;
+            uwsgi_connect_timeout 300;
+            uwsgi_send_timeout 300;
+        }
+
+        # Docker API (порт 8000)
+        location /docker/ {
+            proxy_pass http://docker_backend/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
+        }
+
+        # Health check для Nginx
+        location /health {
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+        # Health check для Django API
+        location /api/health/ {
+            include uwsgi_params;
+            uwsgi_pass django_backend;
+            uwsgi_read_timeout 300;
+            uwsgi_connect_timeout 300;
+            uwsgi_send_timeout 300;
+        }
+
+        # Health check для Docker API
+        location /docker/health/ {
+            proxy_pass http://docker_backend/health/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+}

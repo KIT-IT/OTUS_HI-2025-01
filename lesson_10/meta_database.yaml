@@ -1,0 +1,21 @@
+#cloud-config
+users:
+  - name: sedunovsv
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+# Установка PostgreSQL
+package_update: true
+packages:
+  - postgresql
+  - postgresql-contrib
+runcmd:
+  - systemctl start postgresql
+  - systemctl enable postgresql
+  - sudo -u postgres psql -c "CREATE DATABASE appdb;"
+  - sudo -u postgres psql -c "CREATE USER appuser WITH PASSWORD 'apppassword';"
+  - sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE appdb TO appuser;"
+  - echo "Database server is ready!"

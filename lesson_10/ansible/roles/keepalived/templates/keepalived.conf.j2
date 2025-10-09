@@ -1,0 +1,31 @@
+vrrp_script chk_nginx {
+    script "killall -0 nginx"
+    interval 2
+    weight 2
+}
+
+vrrp_instance VI_1 {
+    state {{ 'MASTER' if inventory_hostname == 'nginx-1' else 'BACKUP' }}
+    interface {{ ansible_default_ipv4.interface }}
+    virtual_router_id {{ virtual_router_id }}
+    priority {{ keepalived_priority_master if inventory_hostname == 'nginx-1' else keepalived_priority_backup }}
+    advert_int 1
+    unicast_src_ip {{ ansible_default_ipv4.address }}
+    unicast_peer {
+        {% if inventory_hostname == 'nginx-1' %}
+        {{ hostvars['nginx-2']['ansible_host'] }}
+        {% else %}
+        {{ hostvars['nginx-1']['ansible_host'] }}
+        {% endif %}
+    }
+    authentication {
+        auth_type PASS
+        auth_pass otus_ha_pass
+    }
+    virtual_ipaddress {
+        {{ virtual_ip }}/24
+    }
+    track_script {
+        chk_nginx
+    }
+}

@@ -1,0 +1,21 @@
+---
+- name: Установить Keepalived
+  apt:
+    name: keepalived
+    state: present
+    update_cache: yes
+
+- name: Скопировать шаблон конфигурации Keepalived
+  template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart keepalived
+
+- name: Запустить и включить Keepalived
+  service:
+    name: keepalived
+    state: started
+    enabled: yes

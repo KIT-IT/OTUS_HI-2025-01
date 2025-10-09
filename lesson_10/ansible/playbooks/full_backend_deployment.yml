@@ -1,0 +1,44 @@
+---
+- name: Полное развертывание Backend инфраструктуры
+  hosts: localhost
+  gather_facts: no
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    - name: Обновить inventory с IP адресами
+      script: update_inventory.sh
+      args:
+        chdir: /home/sedunovsv/OTUS/OTUS_HI-2025-01/lesson_10/ansible
+
+    - name: Проверить подключение к серверам
+      command: ansible all -i inventory.ini -m ping
+      args:
+        chdir: /home/sedunovsv/OTUS/OTUS_HI-2025-01/lesson_10/ansible
+
+    - name: Настроить Database сервер
+      include: database_setup.yml
+
+    - name: Настроить Backend серверы
+      include: backend_setup.yml
+
+    - name: Показать информацию о развертывании
+      debug:
+        msg: |
+          Backend инфраструктура успешно развернута!
+          
+          Database сервер:
+            - PostgreSQL с базой данных django_db
+            - Пользователь: django_user
+            - Пароль: django_password
+          
+          Backend серверы:
+            - Django REST API с UWSGI
+            - Nginx для проксирования
+            - API endpoints: /api/
+            - Admin interface: /admin/
+          
+          Для тестирования:
+            - curl http://<backend-ip>/api/
+            - curl http://<backend-ip>/api/health/
+            - curl http://<backend-ip>/api/items/

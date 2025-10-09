@@ -1,0 +1,14 @@
+---
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart uwsgi-django
+  service:
+    name: uwsgi-django
+    state: restarted
+
+- name: restart nginx
+  service:
+    name: nginx
+    state: restarted

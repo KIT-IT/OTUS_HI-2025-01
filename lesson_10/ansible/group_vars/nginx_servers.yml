@@ -1,0 +1,10 @@
+---
+# Переменные для nginx серверов
+keepalived_priority_master: 100
+keepalived_priority_backup: 90
+virtual_ip: "192.168.10.100"
+virtual_router_id: 51
+
+# Порты для backend серверов
+django_backend_port: 8001  # Django/UWSGI
+docker_backend_port: 8000  # Docker
