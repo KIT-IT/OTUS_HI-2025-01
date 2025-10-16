@@ -1,0 +1,124 @@
+#cloud-config
+users:
+  - name: ubuntu
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    groups: sudo
+    shell: /bin/bash
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - wget
+  - gnupg2
+  - software-properties-common
+  - apt-transport-https
+  - ca-certificates
+  - lsb-release
+
+runcmd:
+  # Update system
+  - apt-get update
+  
+  # Install MySQL Server
+  - apt-get install -y mysql-server
+  
+  # Configure MySQL
+  - systemctl stop mysql
+  - systemctl disable mysql
+  
+  # Create MySQL InnoDB Cluster configuration
+  - |
+    cat > /etc/mysql/mysql.conf.d/innodb-cluster.cnf << EOF
+    [mysqld]
+    # Group Replication settings
+    server_id=${node_id}
+    gtid_mode=ON
+    enforce_gtid_consistency=ON
+    binlog_checksum=NONE
+    log_bin=binlog
+    log_slave_updates=ON
+    binlog_format=ROW
+    master_info_repository=TABLE
+    relay_log_info_repository=TABLE
+    
+    # Group Replication
+    transaction_write_set_extraction=XXHASH64
+    loose-group_replication_group_name="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    loose-group_replication_start_on_boot=off
+    loose-group_replication_local_address="__INTERNAL_IP__:33061"
+    loose-group_replication_group_seeds="192.168.10.30:33061,192.168.10.24:33061,192.168.10.28:33061"
+    loose-group_replication_bootstrap_group=off
+    loose-group_replication_single_primary_mode=on
+    loose-group_replication_enforce_update_everywhere_checks=off
+    
+    # InnoDB settings
+    innodb_buffer_pool_size=1G
+    innodb_log_file_size=256M
+    innodb_log_buffer_size=16M
+    innodb_flush_log_at_trx_commit=2
+    innodb_file_per_table=1
+    
+    # Network
+    bind-address=0.0.0.0
+    EOF
+  
+  # Get internal IP and update configuration
+  - INTERNAL_IP=$(hostname -I | awk '{print $1}')
+  - sed -i "s/__INTERNAL_IP__/$INTERNAL_IP/g" /etc/mysql/mysql.conf.d/innodb-cluster.cnf
+  
+  # Start MySQL service
+  - systemctl start mysql
+  - systemctl enable mysql
+  
+  # Wait for MySQL to start
+  - sleep 10
+  
+  # Create test database
+  - |
+    mysql -e "
+    CREATE DATABASE IF NOT EXISTS testdb;
+    USE testdb;
+    CREATE TABLE IF NOT EXISTS test_table (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    INSERT INTO test_table (name) VALUES ('Node ${node_id} - Test Data');
+    "
+  
+  # Create monitoring script
+  - |
+    cat > /usr/local/bin/cluster-status.sh << 'EOF'
+    #!/bin/bash
+    echo "=== MySQL InnoDB Cluster Status ==="
+    mysql -e "SELECT * FROM performance_schema.replication_group_members;"
+    echo ""
+    echo "=== Group Replication Status ==="
+    mysql -e "SHOW STATUS LIKE 'group_replication%';"
+    echo ""
+    echo "=== Test Data ==="
+    mysql -e "SELECT * FROM testdb.test_table;"
+    EOF
+  - chmod +x /usr/local/bin/cluster-status.sh
+
+write_files:
+  - path: /etc/systemd/system/cluster-monitor.service
+    content: |
+      [Unit]
+      Description=MySQL Cluster Monitor
+      After=mysql.service
+      
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/cluster-status.sh
+      User=root
+      
+      [Install]
+      WantedBy=multi-user.target
+
+final_message: "MySQL Cluster node ${node_id} setup completed!"

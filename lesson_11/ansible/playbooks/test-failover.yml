@@ -1,0 +1,97 @@
+---
+- name: Test MySQL Cluster Failover
+  hosts: mysql_cluster
+  become: yes
+  
+  tasks:
+    - name: Check cluster status before test
+      shell: mysql -e "SHOW STATUS LIKE 'wsrep%';" | grep -E "(wsrep_cluster_size|wsrep_local_state_comment|wsrep_cluster_status)"
+      register: cluster_status_before
+      
+    - name: Display cluster status before test
+      debug:
+        msg: "{{ cluster_status_before.stdout_lines }}"
+        
+    - name: Insert test data for failover test
+      mysql_db:
+        name: testdb
+        state: present
+      vars:
+        mysql_commands:
+          - "INSERT INTO test_table (name) VALUES ('Failover Test - {{ ansible_date_time.iso8601 }}');"
+          
+    - name: Verify data replication
+      shell: mysql -e "SELECT COUNT(*) as total_records FROM testdb.test_table;"
+      register: record_count
+      
+    - name: Display record count
+      debug:
+        msg: "Total records in cluster: {{ record_count.stdout_lines }}"
+        
+    - name: Test read operations
+      shell: mysql -e "SELECT * FROM testdb.test_table ORDER BY id DESC LIMIT 5;"
+      register: recent_data
+      
+    - name: Display recent data
+      debug:
+        msg: "{{ recent_data.stdout_lines }}"
+
+---
+- name: Simulate Node Failure Test
+  hosts: mysql_cluster[0]
+  become: yes
+  
+  tasks:
+    - name: Stop MySQL on first node to simulate failure
+      systemd:
+        name: mysql
+        state: stopped
+      when: node_id == "1"
+      
+    - name: Wait for cluster to detect failure
+      pause:
+        seconds: 10
+        
+    - name: Check remaining cluster status
+      shell: mysql -e "SHOW STATUS LIKE 'wsrep_cluster_size';"
+      register: cluster_size_after_failure
+      delegate_to: "{{ groups['mysql_cluster'][1] }}"
+      
+    - name: Display cluster size after failure
+      debug:
+        msg: "Cluster size after node 1 failure: {{ cluster_size_after_failure.stdout_lines }}"
+        
+    - name: Test write operations on remaining nodes
+      mysql_db:
+        name: testdb
+        state: present
+      vars:
+        mysql_commands:
+          - "INSERT INTO test_table (name) VALUES ('After Failure Test - {{ ansible_date_time.iso8601 }}');"
+      delegate_to: "{{ groups['mysql_cluster'][1] }}"
+      
+    - name: Restart MySQL on failed node
+      systemd:
+        name: mysql
+        state: started
+      when: node_id == "1"
+      
+    - name: Wait for node to rejoin cluster
+      pause:
+        seconds: 15
+        
+    - name: Check final cluster status
+      shell: mysql -e "SHOW STATUS LIKE 'wsrep_cluster_size';"
+      register: final_cluster_size
+      
+    - name: Display final cluster status
+      debug:
+        msg: "Final cluster size: {{ final_cluster_size.stdout_lines }}"
+        
+    - name: Verify data consistency after recovery
+      shell: mysql -e "SELECT COUNT(*) as total_records FROM testdb.test_table;"
+      register: final_record_count
+      
+    - name: Display final record count
+      debug:
+        msg: "Final total records: {{ final_record_count.stdout_lines }}"
