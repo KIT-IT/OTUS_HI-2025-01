@@ -1,0 +1,86 @@
+---
+- name: Install prerequisites
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: yes
+
+- name: Add Docker official GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release | default('jammy') }} stable"
+    state: present
+
+- name: Install Docker and Compose
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+
+- name: Ensure Docker service is running
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Create deploy directory
+  file:
+    path: /opt/saleor
+    state: directory
+    mode: "0755"
+
+- name: Render docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/saleor/docker-compose.yml
+    mode: "0644"
+
+- name: Start Saleor stack
+  shell: docker compose up -d
+  args:
+    chdir: /opt/saleor
+  environment:
+    COMPOSE_PROJECT_NAME: saleor
+
+- name: Wait for Saleor API to be ready
+  wait_for:
+    port: 8000
+    host: "{{ ansible_host }}"
+    delay: 10
+    timeout: 300
+
+- name: Run Django migrations
+  shell: docker compose exec -T api python manage.py migrate
+  args:
+    chdir: /opt/saleor
+  ignore_errors: yes
+
+- name: Create superuser (if not exists)
+  shell: docker compose exec -T api python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(email='admin@example.com').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin')"
+  args:
+    chdir: /opt/saleor
+  ignore_errors: yes
+
+- name: Set Russian language as default
+  shell: |
+    docker compose exec -T api python manage.py shell -c "
+    from saleor.site.models import SiteSettings;
+    site_settings, created = SiteSettings.objects.get_or_create(defaults={'language_code': 'ru'});
+    site_settings.language_code = 'ru';
+    site_settings.save();
+    print('Language set to Russian');
+    "
+  args:
+    chdir: /opt/saleor
+  ignore_errors: yes

@@ -1,0 +1,86 @@
+---
+- name: Install HAProxy
+  apt:
+    name: haproxy
+    state: present
+    update_cache: yes
+
+- name: Configure HAProxy for Patroni cluster
+  copy:
+    dest: /etc/haproxy/haproxy.cfg
+    mode: 0644
+    content: |
+      global
+        log /dev/log    local0
+        log /dev/log    local1 notice
+        daemon
+
+      defaults
+        log     global
+        mode    tcp
+        option  tcplog
+        option  dontlognull
+        timeout connect 5s
+        timeout client  50s
+        timeout server  50s
+
+      listen stats
+        bind *:8080
+        mode http
+        stats enable
+        stats uri /haproxy_stats
+        stats refresh 10s
+        stats auth admin:password
+
+      # PostgreSQL backend
+      frontend postgres
+        bind *:{{ haproxy_listen_port }}
+        default_backend patroni_pg
+
+      backend patroni_pg
+        option tcp-check
+        tcp-check connect port {{ haproxy_backend_port }}
+        default-server inter 3s fall 3 rise 2
+      {% for host in groups['patroni'] %}
+        server {{ host }} {{ hostvars[host].ansible_host }}:{{ haproxy_backend_port }} check
+      {% endfor %}
+
+      # Saleor API frontend
+      frontend saleor_api
+        bind *:80
+        mode http
+        default_backend saleor_backend
+
+      # Saleor Dashboard frontend  
+      frontend saleor_dashboard
+        bind *:9000
+        mode http
+        default_backend saleor_dashboard_backend
+
+      # Saleor API backend
+      backend saleor_backend
+        mode http
+        balance roundrobin
+        option httpchk GET /graphql/
+        http-check expect status 200
+        default-server inter 3s fall 3 rise 2
+      {% for host in groups['saleor'] %}
+        server {{ host }} {{ hostvars[host].ansible_host }}:8000 check
+      {% endfor %}
+
+      # Saleor Dashboard backend
+      backend saleor_dashboard_backend
+        mode http
+        balance roundrobin
+        option httpchk GET /
+        http-check expect status 200
+        default-server inter 3s fall 3 rise 2
+      {% for host in groups['saleor'] %}
+        server {{ host }} {{ hostvars[host].ansible_host }}:9000 check
+      {% endfor %}
+
+- name: Enable and restart HAProxy
+  systemd:
+    name: haproxy
+    enabled: yes
+    state: restarted
