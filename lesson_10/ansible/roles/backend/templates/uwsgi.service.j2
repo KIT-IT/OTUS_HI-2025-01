@@ -1,0 +1,20 @@
+[Unit]
+Description=uWSGI Django Application
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+User={{ django_user }}
+Group={{ django_group }}
+WorkingDirectory={{ django_home }}/{{ django_project_name }}
+Environment=DJANGO_SETTINGS_MODULE={{ django_project_name }}.settings
+ExecStart={{ django_home }}/venv/bin/uwsgi --ini {{ django_home }}/uwsgi.ini
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=3
+KillSignal=SIGQUIT
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target

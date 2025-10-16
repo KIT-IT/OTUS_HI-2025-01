@@ -1,0 +1,154 @@
+---
+- name: Полная настройка Nginx + Keepalived для HA
+  hosts: nginx_servers
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    nginx_worker_processes: auto
+    nginx_worker_connections: 1024
+    django_backend_port: 8001
+    docker_backend_port: 8000
+    # Определяем роль сервера (master/backup)
+    keepalived_role: "{{ 'MASTER' if inventory_hostname == 'nginx-1' else 'BACKUP' }}"
+    keepalived_priority: "{{ keepalived_priority_master if inventory_hostname == 'nginx-1' else keepalived_priority_backup }}"
+    # Backend серверы для балансировки
+    backend_servers:
+      - "{{ hostvars['backend-1']['ansible_host'] }}:8000"
+      - "{{ hostvars['backend-2']['ansible_host'] }}:8000"
+
+  tasks:
+    - name: Обновить кэш пакетов
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Установить необходимые пакеты
+      apt:
+        name:
+          - nginx
+          - keepalived
+          - curl
+        state: present
+
+    - name: Создать директории для конфигураций
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/nginx/conf.d
+        - /var/log/nginx
+        - /etc/keepalived
+
+    - name: Создать скрипт проверки Nginx
+      copy:
+        content: |
+          #!/bin/bash
+          # Скрипт проверки состояния Nginx
+          if ! pgrep -x "nginx" > /dev/null; then
+              echo "Nginx is not running"
+              exit 1
+          fi
+          
+          # Проверяем доступность Nginx через HTTP
+          if ! curl -f http://localhost/health > /dev/null 2>&1; then
+              echo "Nginx health check failed"
+              exit 1
+          fi
+          
+          echo "Nginx is healthy"
+          exit 0
+        dest: /etc/keepalived/check_nginx.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Настроить конфигурацию Nginx
+      template:
+        src: ../roles/nginx/templates/nginx_balancer.conf.j2
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart nginx
+
+    - name: Настроить конфигурацию Keepalived
+      template:
+        src: ../roles/keepalived/templates/keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart keepalived
+
+    - name: Создать тестовую страницу
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Nginx Server {{ inventory_hostname }}</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; }
+                  .header { color: #2c3e50; }
+                  .info { background: #ecf0f1; padding: 20px; border-radius: 5px; }
+              </style>
+          </head>
+          <body>
+              <h1 class="header">Welcome to {{ inventory_hostname }}</h1>
+              <div class="info">
+                  <p><strong>Server:</strong> {{ inventory_hostname }}</p>
+                  <p><strong>IP:</strong> {{ ansible_default_ipv4.address }}</p>
+                  <p><strong>Role:</strong> {{ keepalived_role }}</p>
+                  <p><strong>Priority:</strong> {{ keepalived_priority }}</p>
+                  <p><strong>Virtual IP:</strong> {{ virtual_ip }}</p>
+              </div>
+              <p>This is Nginx server for load balancing with Keepalived HA</p>
+          </body>
+          </html>
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Включить и запустить сервисы
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - nginx
+        - keepalived
+
+    - name: Проверить статус сервисов
+      systemd:
+        name: "{{ item }}"
+      register: service_status
+      loop:
+        - nginx
+        - keepalived
+
+    - name: Показать статус сервисов
+      debug:
+        msg: "{{ item.item }} is {{ 'running' if item.status.ActiveState == 'active' else 'not running' }}"
+      loop: "{{ service_status.results }}"
+
+    - name: Показать информацию о сервере
+      debug:
+        msg: |
+          Server: {{ inventory_hostname }}
+          Role: {{ keepalived_role }}
+          Priority: {{ keepalived_priority }}
+          IP: {{ ansible_default_ipv4.address }}
+          Virtual IP: {{ virtual_ip }}
+
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+    - name: restart keepalived
+      systemd:
+        name: keepalived
+        state: restarted

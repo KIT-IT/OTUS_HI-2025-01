@@ -1,0 +1,6 @@
+---
+postgres_version: "12"
+postgres_db: "appdb"
+postgres_user: "appuser"
+postgres_password: "apppassword"
+postgres_admin_password: "admin123"

@@ -1,0 +1,21 @@
+---
+- name: Полное развертывание инфраструктуры
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Включить IP Forwarding на всех хостах (если требуется)
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        reload: yes
+      when: inventory_hostname in groups['nginx_servers'] or inventory_hostname in groups['backend_servers']
+
+- name: Настройка PostgreSQL Database сервера
+  import_playbook: database.yml
+
+- name: Настройка Backend серверов с Django
+  import_playbook: backend.yml
+
+- name: Настройка Nginx с Keepalived для высокой доступности
+  import_playbook: nginx_ha.yml
