@@ -1,0 +1,107 @@
+---
+- name: Install Node.js and npm
+  apt:
+    name:
+      - nodejs
+      - npm
+    state: present
+    update_cache: yes
+
+- name: Install nvm (Node Version Manager)
+  shell: |
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+  args:
+    creates: /root/.nvm/nvm.sh
+
+- name: Source nvm and install Node.js 18
+  shell: |
+    export NVM_DIR="/root/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    nvm install 18 && nvm use 18 && nvm alias default 18
+  args:
+    creates: /root/.nvm/versions/node/v18.0.0
+    executable: /bin/bash
+
+- name: Create storefront directory
+  file:
+    path: "{{ storefront_deploy_dir }}"
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Clone Saleor Storefront repository
+  git:
+    repo: https://github.com/saleor/saleor-storefront.git
+    dest: "{{ storefront_deploy_dir }}"
+    version: "{{ storefront_version }}"
+    force: yes
+
+- name: Install dependencies
+  shell: |
+    export NVM_DIR="/root/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    cd {{ storefront_deploy_dir }} && npm install
+  args:
+    creates: "{{ storefront_deploy_dir }}/node_modules"
+    executable: /bin/bash
+
+- name: Create environment configuration
+  template:
+    src: storefront.env.j2
+    dest: "{{ storefront_deploy_dir }}/.env.local"
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+
+- name: Build storefront
+  shell: |
+    export NVM_DIR="/root/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    cd {{ storefront_deploy_dir }} && npm run build
+  args:
+    creates: "{{ storefront_deploy_dir }}/.next"
+    executable: /bin/bash
+
+- name: Install PM2 globally
+  shell: |
+    export NVM_DIR="/root/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    npm install -g pm2
+  args:
+    executable: /bin/bash
+
+- name: Create PM2 ecosystem file
+  template:
+    src: ecosystem.config.js.j2
+    dest: "{{ storefront_deploy_dir }}/ecosystem.config.js"
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+
+- name: Start storefront with PM2
+  shell: |
+    export NVM_DIR="/root/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    cd {{ storefront_deploy_dir }} && pm2 start ecosystem.config.js
+  args:
+    executable: /bin/bash
+  ignore_errors: yes
+
+- name: Save PM2 configuration
+  shell: |
+    export NVM_DIR="/root/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    pm2 save
+  args:
+    executable: /bin/bash
+  ignore_errors: yes
+
+- name: Setup PM2 startup script
+  shell: |
+    export NVM_DIR="/root/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    pm2 startup
+  args:
+    executable: /bin/bash
+  ignore_errors: yes
