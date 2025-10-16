@@ -1,0 +1,8 @@
+---
+- name: Настройка Keepalived для высокой доступности
+  hosts: nginx_servers
+  become: yes
+  roles:
+    - keepalived
+  vars:
+    ansible_python_interpreter: /usr/bin/python3

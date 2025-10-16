@@ -1,0 +1,44 @@
+---
+- name: Включить IP Forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    reload: yes
+
+- name: Установить Nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Запустить и включить Nginx
+  service:
+    name: nginx
+    state: started
+    enabled: yes
+
+- name: Скопировать шаблон конфигурации Nginx
+  template:
+    src: nginx_balancer.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart nginx
+
+- name: Создать директорию для веб-страниц
+  file:
+    path: /var/www/html
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+
+- name: Создать тестовую страницу index.html
+  copy:
+    content: "<h1>Welcome to Nginx Load Balancer!</h1>"
+    dest: /var/www/html/index.html
+    owner: www-data
+    group: www-data
+    mode: '0644'

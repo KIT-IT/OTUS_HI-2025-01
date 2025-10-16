@@ -1,0 +1,127 @@
+---
+- name: Настройка PostgreSQL Database сервера
+  hosts: database_servers
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    postgres_version: "12"
+    postgres_db: "django_db"
+    postgres_user: "django_user"
+    postgres_password: "django_password"
+    postgres_admin_password: "admin123"
+
+  tasks:
+    - name: Обновить кэш пакетов
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Установить PostgreSQL
+      apt:
+        name:
+          - postgresql
+          - postgresql-contrib
+          - postgresql-client
+          - python3-psycopg2
+        state: present
+
+    - name: Запустить и включить PostgreSQL
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: Разрешить локальные подключения под postgres без пароля (trust)
+      lineinfile:
+        path: /etc/postgresql/{{ postgres_version }}/main/pg_hba.conf
+        regexp: "^local\\s+all\\s+postgres\\s+"
+        line: "local   all             postgres                                trust"
+        backup: yes
+
+    - name: Перезапустить PostgreSQL после изменения pg_hba.conf
+      systemd:
+        name: postgresql
+        state: restarted
+
+    - name: Создать пользователя PostgreSQL
+      postgresql_user:
+        name: "{{ postgres_user }}"
+        password: "{{ postgres_password }}"
+        state: present
+        login_user: postgres
+        login_unix_socket: "/var/run/postgresql"
+
+    - name: Создать базу данных
+      postgresql_db:
+        name: "{{ postgres_db }}"
+        owner: "{{ postgres_user }}"
+        state: present
+        login_user: postgres
+        login_unix_socket: "/var/run/postgresql"
+
+    - name: Настроить PostgreSQL для удаленных подключений
+      lineinfile:
+        path: /etc/postgresql/{{ postgres_version }}/main/postgresql.conf
+        regexp: "^#?listen_addresses"
+        line: "listen_addresses = '*'"
+        backup: yes
+
+    - name: Настроить аутентификацию PostgreSQL
+      lineinfile:
+        path: /etc/postgresql/{{ postgres_version }}/main/pg_hba.conf
+        line: "host    {{ postgres_db }}    {{ postgres_user }}    0.0.0.0/0    md5"
+        backup: yes
+
+    - name: Настроить аутентификацию для всех баз
+      lineinfile:
+        path: /etc/postgresql/{{ postgres_version }}/main/pg_hba.conf
+        line: "host    all    {{ postgres_user }}    0.0.0.0/0    md5"
+        backup: yes
+
+    - name: Перезапустить PostgreSQL
+      systemd:
+        name: postgresql
+        state: restarted
+
+    - name: Создать тестовую таблицу
+      postgresql_query:
+        db: "{{ postgres_db }}"
+        login_user: postgres
+        login_unix_socket: "/var/run/postgresql"
+        query: |
+          CREATE TABLE IF NOT EXISTS test_connection (
+              id SERIAL PRIMARY KEY,
+              server_name VARCHAR(100),
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+    - name: Вставить тестовые данные
+      postgresql_query:
+        db: "{{ postgres_db }}"
+        login_user: postgres
+        login_unix_socket: "/var/run/postgresql"
+        query: |
+          INSERT INTO test_connection (server_name) 
+          VALUES ('{{ inventory_hostname }}') 
+          ON CONFLICT DO NOTHING;
+
+    - name: Проверить подключение к базе данных
+      postgresql_query:
+        db: "{{ postgres_db }}"
+        login_user: postgres
+        login_unix_socket: "/var/run/postgresql"
+        query: "SELECT COUNT(*) FROM test_connection;"
+      register: db_test
+
+    - name: Показать результат теста базы данных
+      debug:
+        msg: "Database test successful. Records count: {{ db_test.query_result[0].count }}"
+
+    - name: Показать информацию о базе данных
+      debug:
+        msg: |
+          Database Server: {{ inventory_hostname }}
+          Database Name: {{ postgres_db }}
+          Database User: {{ postgres_user }}
+          PostgreSQL Version: {{ postgres_version }}
+          Connection String: postgresql://{{ postgres_user }}:{{ postgres_password }}@{{ ansible_default_ipv4.address }}:5432/{{ postgres_db }}

@@ -1,0 +1,56 @@
+---
+- name: Обновить кэш пакетов
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Установить PostgreSQL
+  apt:
+    name:
+      - postgresql-{{ postgres_version }}
+      - postgresql-contrib-{{ postgres_version }}
+    state: present
+    update_cache: yes
+
+- name: Запустить и включить PostgreSQL
+  systemd:
+    name: postgresql
+    state: started
+    enabled: yes
+
+- name: Настроить аутентификацию PostgreSQL
+  lineinfile:
+    path: /etc/postgresql/{{ postgres_version }}/main/pg_hba.conf
+    line: "local   all             postgres                                peer"
+    backup: yes
+
+- name: Создать пользователя PostgreSQL
+  postgresql_user:
+    name: "{{ postgres_user }}"
+    password: "{{ postgres_password }}"
+    state: present
+    login_user: postgres
+    login_host: localhost
+
+- name: Создать базу данных
+  postgresql_db:
+    name: "{{ postgres_db }}"
+    owner: "{{ postgres_user }}"
+    state: present
+    login_user: postgres
+    login_host: localhost
+
+- name: Настроить PostgreSQL для удаленных подключений
+  lineinfile:
+    path: /etc/postgresql/{{ postgres_version }}/main/postgresql.conf
+    regexp: "^#?listen_addresses"
+    line: "listen_addresses = '*'"
+    backup: yes
+  notify: restart postgresql
+
+- name: Настроить аутентификацию для удаленных подключений
+  lineinfile:
+    path: /etc/postgresql/{{ postgres_version }}/main/pg_hba.conf
+    line: "host    all             all             0.0.0.0/0               md5"
+    backup: yes
+  notify: restart postgresql

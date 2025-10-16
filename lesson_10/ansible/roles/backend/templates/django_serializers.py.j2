@@ -1,0 +1,23 @@
+"""
+Serializers for {{ django_app_name }} app.
+"""
+from rest_framework import serializers
+from .models import Item, ServerLog
+
+
+class ItemSerializer(serializers.ModelSerializer):
+    """Serializer for Item model."""
+    
+    class Meta:
+        model = Item
+        fields = ['id', 'name', 'description', 'price', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ServerLogSerializer(serializers.ModelSerializer):
+    """Serializer for ServerLog model."""
+    
+    class Meta:
+        model = ServerLog
+        fields = ['id', 'level', 'message', 'timestamp', 'server']
+        read_only_fields = ['id', 'timestamp']

@@ -1,0 +1,83 @@
+---
+- name: Настройка Keepalived для HA Nginx серверов
+  hosts: nginx_servers
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    # Определяем роль сервера (master/backup)
+    keepalived_role: "{{ 'MASTER' if inventory_hostname == 'nginx-1' else 'BACKUP' }}"
+    keepalived_priority: "{{ keepalived_priority_master if inventory_hostname == 'nginx-1' else keepalived_priority_backup }}"
+
+  tasks:
+    - name: Обновить кэш пакетов
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Установить Keepalived
+      apt:
+        name: keepalived
+        state: present
+
+    - name: Создать директорию для конфигурации Keepalived
+      file:
+        path: /etc/keepalived
+        state: directory
+        mode: '0755'
+
+    - name: Создать скрипт проверки Nginx
+      copy:
+        content: |
+          #!/bin/bash
+          # Скрипт проверки состояния Nginx
+          if ! pgrep -x "nginx" > /dev/null; then
+              echo "Nginx is not running"
+              exit 1
+          fi
+          
+          # Проверяем доступность Nginx через HTTP
+          if ! curl -f http://localhost/health > /dev/null 2>&1; then
+              echo "Nginx health check failed"
+              exit 1
+          fi
+          
+          echo "Nginx is healthy"
+          exit 0
+        dest: /etc/keepalived/check_nginx.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Настроить конфигурацию Keepalived
+      template:
+        src: keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart keepalived
+
+    - name: Включить и запустить Keepalived
+      systemd:
+        name: keepalived
+        state: started
+        enabled: yes
+
+    - name: Проверить статус Keepalived
+      systemd:
+        name: keepalived
+      register: keepalived_status
+
+    - name: Показать статус Keepalived
+      debug:
+        msg: "Keepalived is {{ 'running' if keepalived_status.status.ActiveState == 'active' else 'not running' }}"
+
+    - name: Показать роль сервера
+      debug:
+        msg: "Server role: {{ keepalived_role }}, Priority: {{ keepalived_priority }}"
+
+  handlers:
+    - name: restart keepalived
+      systemd:
+        name: keepalived
+        state: restarted

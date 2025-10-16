@@ -1,0 +1,48 @@
+[uwsgi]
+# Django project settings
+module = {{ django_project_name }}.wsgi:application
+pythonpath = {{ django_home }}/{{ django_project_name }}
+chdir = {{ django_home }}/{{ django_project_name }}
+
+# Process settings
+master = true
+processes = 4
+threads = 2
+max-requests = 5000
+vacuum = true
+die-on-term = true
+
+# Socket settings
+socket = 0.0.0.0:{{ uwsgi_port }}
+protocol = uwsgi
+
+# Logging
+logto = {{ django_home }}/logs/uwsgi.log
+log-maxsize = 50000000
+log-backupcount = 5
+
+# User and group
+uid = {{ django_user }}
+gid = {{ django_group }}
+
+# Environment variables
+env = DJANGO_SETTINGS_MODULE={{ django_project_name }}.settings
+
+# Buffer size
+buffer-size = 32768
+
+# Stats
+stats = 127.0.0.1:9191
+stats-http = true
+
+# Memory usage
+limit-as = 512
+
+# Reload settings
+py-autoreload = 1
+harakiri = 60
+harakiri-verbose = true
+
+# Static files
+static-map = /static={{ django_home }}/static
+static-map = /media={{ django_home }}/media
