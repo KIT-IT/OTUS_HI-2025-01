@@ -1,0 +1,6 @@
+saleor_db_url: "postgres://{{ saleor_db_user }}:{{ saleor_db_password }}@{{ hostvars[groups['haproxy'][0]].ansible_host }}:5432/{{ saleor_db_name }}"
+saleor_allowed_hosts: "*"
+saleor_secret_key: "please_change_me"
+saleor_db_name: saleor
+saleor_db_user: saleor
+saleor_db_password: change_me

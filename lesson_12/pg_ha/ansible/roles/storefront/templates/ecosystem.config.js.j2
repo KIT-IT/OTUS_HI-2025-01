@@ -1,0 +1,12 @@
+module.exports = {
+  apps: [{
+    name: 'saleor-storefront',
+    script: 'npm',
+    args: 'start',
+    cwd: '{{ storefront_deploy_dir }}',
+    env: {
+      NODE_ENV: 'production',
+      PORT: {{ storefront_port }}
+    }
+  }]
+};

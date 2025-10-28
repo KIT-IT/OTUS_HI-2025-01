@@ -1,0 +1,52 @@
+---
+- name: Ensure PostgreSQL client installed (for psql)
+  apt:
+    name: postgresql-client
+    state: present
+    update_cache: yes
+
+- name: Normalize Saleor DB variables
+  set_fact:
+    saleor_db_name: "{{ saleor_db_name | default(saleor_db.name | default('saleor')) }}"
+    saleor_db_user: "{{ saleor_db_user | default(saleor_db.user | default('saleor')) }}"
+    saleor_db_password: "{{ saleor_db_password | default(saleor_db.password | default('change_me')) }}"
+
+- name: Wait for Patroni to be ready
+  wait_for:
+    port: "{{ patroni_rest_port }}"
+    host: localhost
+    delay: 10
+    timeout: 120
+
+- name: Check Patroni role on this node
+  uri:
+    url: "http://localhost:{{ patroni_rest_port }}/role"
+    method: GET
+    return_content: yes
+    status_code: 200
+  register: patroni_role_resp
+  retries: 5
+  delay: 10
+  until: patroni_role_resp.status == 200
+  failed_when: false
+
+- name: Set fact is_leader
+  set_fact:
+    is_leader: "{{ 'leader' in (patroni_role_resp.content | default('')) or 'master' in (patroni_role_resp.content | default('')) }}"
+
+- name: Create Saleor DB user on leader
+  shell: |
+    sudo -u postgres psql -c "DO \$\$ BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='{{ saleor_db_user }}') THEN
+      CREATE ROLE {{ saleor_db_user }} LOGIN PASSWORD '{{ saleor_db_password }}' CREATEDB;
+    ELSE
+      ALTER ROLE {{ saleor_db_user }} LOGIN PASSWORD '{{ saleor_db_password }}' CREATEDB;
+    END IF;
+    END \$\$;"
+  when: is_leader | bool
+
+- name: Create Saleor database on leader
+  shell: |
+    sudo -u postgres createdb -O {{ saleor_db_user }} {{ saleor_db_name }}
+  when: is_leader | bool
+  ignore_errors: yes

@@ -1,0 +1,40 @@
+version: "3.9"
+services:
+  api:
+    image: ghcr.io/saleor/saleor:3.20
+    environment:
+      - DATABASE_URL={{ saleor_db_url }}
+      - REDIS_URL=redis://redis:6379/0
+      - ALLOWED_HOSTS={{ saleor_allowed_hosts }}
+      - SECRET_KEY={{ saleor_secret_key }}
+      - LANG=ru_RU.UTF-8
+      - LC_ALL=ru_RU.UTF-8
+      - LANGUAGE_CODE=ru
+      - DJANGO_LANGUAGE_CODE=ru
+      - SALEOR_LANGUAGE_CODE=ru
+    depends_on:
+      - redis
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    image: ghcr.io/saleor/saleor-dashboard:3.20
+    environment:
+      - API_URL=http://{{ hostvars[inventory_hostname].ansible_host | default(inventory_hostname) }}:8000/graphql/
+      - LANG=ru_RU.UTF-8
+      - LC_ALL=ru_RU.UTF-8
+    ports:
+      - "9000:80"
+    depends_on:
+      - api
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+
+volumes:
+  redis-data: {}

@@ -1,0 +1,33 @@
+version: "3.9"
+services:
+  api:
+    image: ghcr.io/saleor/saleor:3.20
+    environment:
+      - DATABASE_URL=postgres://saleor:change_me@haproxy.service.local:5432/saleor
+      - REDIS_URL=redis://redis:6379/0
+      - ALLOWED_HOSTS=*
+      - SECRET_KEY=please_change_me
+    depends_on:
+      - redis
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    image: ghcr.io/saleor/saleor-dashboard:latest
+    environment:
+      - API_URL=http://localhost:8000/graphql/
+    ports:
+      - "9000:80"
+    depends_on:
+      - api
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+
+volumes:
+  redis-data: {}
