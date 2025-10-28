@@ -1,0 +1,35 @@
+---
+- name: Install nginx and configure web servers
+  hosts: web_servers
+  become: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Create custom HTML content
+      template:
+        src: index.html.j2
+        dest: /var/www/html/index.html
+        mode: '0644'
+
+    - name: Start and enable nginx
+      systemd:
+        name: nginx
+        enabled: yes
+        state: started
+
+    - name: Check nginx is running
+      uri:
+        url: "http://{{ ansible_host_private }}"
+        status_code: 200
+      delegate_to: localhost
+
+

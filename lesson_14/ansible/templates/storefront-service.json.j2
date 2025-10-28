@@ -1,0 +1,17 @@
+{
+  "service": {
+    "name": "storefront",
+    "id": "storefront-{{ ansible_host_private }}",
+    "tags": ["web", "frontend"],
+    "address": "{{ ansible_host_private }}",
+    "port": 3000,
+    "check": {
+      "http": "http://{{ ansible_host_private }}:3000/",
+      "interval": "10s",
+      "timeout": "3s",
+      "deregister_critical_service_after": "30s"
+    }
+  }
+}
+
+

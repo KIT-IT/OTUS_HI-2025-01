@@ -1,0 +1,37 @@
+{
+  "datacenter": "{{ consul_datacenter }}",
+  "data_dir": "/opt/consul/data",
+  "log_level": "{{ consul_log_level }}",
+  "bind_addr": "{{ consul_bind_ip }}",
+  "client_addr": "0.0.0.0",
+  "ui_config": {
+    "enabled": true
+  },
+  "server": true,
+  "bootstrap_expect": {{ consul_bootstrap_expect }},
+  "retry_join": {{ consul_server_ips | to_json }},
+  "node_name": "{{ consul_node_name }}",
+  "leave_on_terminate": false,
+  "skip_leave_on_interrupt": false,
+  "rejoin_after_leave": true,
+  "ports": {
+    "http": 8500,
+    "https": -1,
+    "grpc": 8502,
+    "dns": 8600,
+    "server": 8300,
+    "serf_lan": 8301,
+    "serf_wan": 8302
+  },
+  "connect": {
+    "enabled": true
+  },
+  "telemetry": {
+    "prometheus_retention_time": "24h"
+  },
+  "acl": {
+    "enabled": false
+  }
+}
+
+
