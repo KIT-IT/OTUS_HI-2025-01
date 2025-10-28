@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Server {{ inventory_hostname }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .server-info {
+            background: #f4f4f4;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .info-item {
+            margin: 10px 0;
+            color: #666;
+        }
+        .ip {
+            font-weight: bold;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 Web Server</h1>
+        <h2>{{ inventory_hostname }}</h2>
+        <div class="server-info">
+            <div class="info-item">Server ID: <span class="ip">{{ inventory_hostname }}</span></div>
+            <div class="info-item">Private IP: <span class="ip">{{ ansible_host_private }}</span></div>
+            <div class="info-item">Timestamp: <span class="ip" id="timestamp"></span></div>
+        </div>
+        <p style="margin-top: 30px; color: #999;">This is a simple web server for Consul service discovery demonstration</p>
+    </div>
+    <script>
+        document.getElementById('timestamp').textContent = new Date().toISOString();
+    </script>
+</body>
+</html>
+
+

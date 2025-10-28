@@ -1,0 +1,16 @@
+{
+  "service": {
+    "name": "web",
+    "id": "web-{{ inventory_hostname }}",
+    "tags": ["nginx", "http", "frontend"],
+    "address": "{{ ansible_host_private }}",
+    "port": 80,
+    "check": {
+      "http": "http://{{ ansible_host_private }}/",
+      "interval": "10s",
+      "timeout": "3s",
+      "deregister_critical_service_after": "30s"
+    }
+  }
+}
+

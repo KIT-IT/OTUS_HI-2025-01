@@ -1,0 +1,23 @@
+[Unit]
+Description=HashiCorp Consul Agent
+Documentation=https://www.consul.io/
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/docker run --rm --name consul \
+  -v /opt/consul/data:/consul/data \
+  -v /opt/consul/config:/consul/config \
+  -p 8500:8500 \
+  -p 8600:8600/udp \
+  --net host \
+  {{ consul_image }} agent -config-dir=/consul/config
+ExecStop=/usr/bin/docker stop consul
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+

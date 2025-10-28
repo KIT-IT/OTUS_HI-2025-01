@@ -1,0 +1,126 @@
+---
+- name: Install and configure Consul cluster
+  hosts: consul_servers:consul_clients
+  become: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - wget
+          - unzip
+          - dnsutils
+          - jq
+          - docker.io
+        state: present
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Copy Consul Docker image to remote servers
+      copy:
+        src: ../consul.1.15.1.tar
+        dest: /tmp/consul.1.15.1.tar
+        mode: '0644'
+
+    - name: Load Consul Docker image
+      shell: docker load -i /tmp/consul.1.15.1.tar
+      register: docker_load_result
+
+    - name: Display loaded image
+      debug:
+        var: docker_load_result.stdout_lines
+
+    - name: Get image ID from loaded image
+      shell: echo "{{ docker_load_result.stdout_lines[0] }}" | grep -o 'sha256:[a-f0-9]*' || echo "sha256:ea9069e56c27e7c6923e3ce76252c8d41ea292754a03a86ebf91d53f73cae473"
+      register: consul_image_id
+      changed_when: false
+
+    - name: Display image ID
+      debug:
+        var: consul_image_id.stdout
+
+    - name: Set final image reference
+      set_fact:
+        consul_image_actual: "{{ consul_image_id.stdout }}"
+
+    - name: Create Consul directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /opt/consul/data
+        - /opt/consul/config
+        - /etc/consul.d
+
+    - name: Get all Consul server private IPs
+      set_fact:
+        consul_server_ips: "{{ groups['consul_servers'] | map('extract', hostvars, 'ansible_default_ipv4') | map(attribute='address') | list }}"
+
+    - name: Create Consul server configuration
+      when: consul_mode == "server"
+      template:
+        src: consul-server.json.j2
+        dest: /etc/consul.d/server.json
+        mode: '0644'
+        backup: yes
+
+    - name: Create Consul client configuration
+      when: consul_mode == "client"
+      template:
+        src: consul-client.json.j2
+        dest: /etc/consul.d/client.json
+        mode: '0644'
+        backup: yes
+
+    - name: Create Consul Docker systemd unit file
+      template:
+        src: consul-docker.service.j2
+        dest: /etc/systemd/system/consul.service
+        owner: root
+        group: root
+        mode: '0644'
+      vars:
+        consul_image: "{{ consul_image_actual }}"
+      notify: restart consul
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start Consul service
+      systemd:
+        name: consul
+        enabled: yes
+        state: started
+
+    - name: Wait for Consul to be ready
+      wait_for:
+        port: 8500
+        delay: 10
+        timeout: 60
+
+    - name: Display Consul status
+      shell: docker exec consul consul members
+      register: consul_status
+      changed_when: false
+
+    - name: Show Consul members
+      debug:
+        var: consul_status.stdout_lines
+
+  handlers:
+    - name: restart consul
+      systemd:
+        name: consul
+        state: restarted

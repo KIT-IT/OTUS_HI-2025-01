@@ -1,0 +1,88 @@
+---
+- name: Install Consul and register services on web servers
+  hosts: web_servers
+  become: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - docker.io
+          - systemd
+          - dnsutils
+        state: present
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Copy Consul Docker image to remote servers
+      copy:
+        src: ../consul.1.15.1.tar
+        dest: /tmp/consul.1.15.1.tar
+        mode: '0644'
+
+    - name: Load Consul Docker image
+      shell: docker load -i /tmp/consul.1.15.1.tar
+
+    - name: Create Consul data directory
+      file:
+        path: /opt/consul/data
+        state: directory
+        mode: '0755'
+
+    - name: Create Consul config directory
+      file:
+        path: /opt/consul/config
+        state: directory
+        mode: '0755'
+
+    - name: Get all Consul server private IPs
+      set_fact:
+        consul_server_ips: "{{ groups['consul_servers'] | map('extract', hostvars, ['ansible_host_private']) | list }}"
+
+    - name: Create Consul client configuration for web servers
+      template:
+        src: consul-web.json.j2
+        dest: /opt/consul/config/web.json
+        mode: '0644'
+
+    - name: Register web service in Consul
+      template:
+        src: web-service.json.j2
+        dest: /opt/consul/config/web-service.json
+        mode: '0644'
+
+    - name: Create Consul systemd unit file for web servers
+      template:
+        src: consul-docker-client.service.j2
+        dest: /etc/systemd/system/consul.service
+        owner: root
+        group: root
+        mode: '0644'
+      vars:
+        consul_image: "sha256:ea9069e56c27e7c6923e3ce76252c8d41ea292754a03a86ebf91d53f73cae473"
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start Consul service
+      systemd:
+        name: consul
+        enabled: yes
+        state: started
+
+    - name: Wait for Consul to be ready
+      wait_for:
+        port: 8500
+        delay: 10
+        timeout: 60

@@ -1,0 +1,17 @@
+{
+  "service": {
+    "name": "saleor",
+    "id": "saleor-{{ ansible_host_private }}",
+    "tags": ["web", "api", "backend"],
+    "address": "{{ ansible_host_private }}",
+    "port": 8000,
+    "check": {
+      "http": "http://{{ ansible_host_private }}:8000/graphql/",
+      "interval": "10s",
+      "timeout": "3s",
+      "deregister_critical_service_after": "30s"
+    }
+  }
+}
+
+

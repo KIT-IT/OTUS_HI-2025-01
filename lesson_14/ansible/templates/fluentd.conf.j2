@@ -1,0 +1,64 @@
+# Fluentd configuration for log shipping to OpenSearch
+
+<source>
+  @type tail
+  @label @NGINX
+  path /var/log/nginx/access.log
+  pos_file /var/log/fluent/nginx-access.log.pos
+  tag nginx.access
+  <parse>
+    @type nginx
+    time_key time
+    time_format %d/%b/%Y:%H:%M:%S %z
+    time_type string
+  </parse>
+</source>
+
+<source>
+  @type tail
+  @label @NGINX
+  path /var/log/nginx/error.log
+  pos_file /var/log/fluent/nginx-error.log.pos
+  tag nginx.error
+  <parse>
+    @type none
+  </parse>
+</source>
+
+<label @NGINX>
+  <filter nginx.access>
+    @type record_transformer
+    <record>
+      hostname "#{Socket.gethostname}"
+      log_type "nginx_access"
+      timestamp "${time}"
+    </record>
+  </filter>
+
+  <filter nginx.error>
+    @type record_transformer
+    <record>
+      hostname "#{Socket.gethostname}"
+      log_type "nginx_error"
+      timestamp "${time}"
+    </record>
+  </filter>
+
+  <match **>
+    @type opensearch
+    @log_level info
+    hosts {{ opensearch_host }}:9200
+    index_name nginx
+    type_name _doc
+    include_tag_key true
+    tag_key @log_name
+    template_name nginx
+    template_file /etc/fluent/nginx-template.json
+    template_overwrite true
+    logstash_format true
+    logstash_prefix nginx
+    logstash_dateformat %Y.%m.%d
+    flush_interval 1s
+  </match>
+</label>
+
