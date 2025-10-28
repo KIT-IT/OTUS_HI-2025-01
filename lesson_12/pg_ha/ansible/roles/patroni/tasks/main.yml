@@ -1,0 +1,150 @@
+---
+- name: Install dependencies for PostgreSQL
+  apt:
+    name:
+      - wget
+      - gnupg
+      - python3-psycopg2
+    state: present
+    update_cache: yes
+
+- name: Add PostgreSQL signing key
+  apt_key:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    state: present
+    keyring: /usr/share/keyrings/postgresql-keyring.gpg
+
+- name: Add PostgreSQL repository
+  apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+
+- name: Install PostgreSQL and Patroni
+  apt:
+    name:
+      - postgresql-{{ postgresql_version }}
+      - patroni
+      - etcd
+    state: present
+
+- name: Stop default PostgreSQL service (handled by Patroni)
+  service:
+    name: postgresql
+    state: stopped
+    enabled: no
+  ignore_errors: yes
+
+- name: Configure Patroni systemd unit
+  copy:
+    dest: /etc/systemd/system/patroni.service
+    content: |
+      [Unit]
+      Description=Patroni PostgreSQL HA
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=postgres
+      ExecStart=/usr/bin/patroni /etc/patroni/config.yml
+      Restart=always
+      LimitNOFILE=1024
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Create Patroni config directory
+  file:
+    path: /etc/patroni
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: 0755
+
+- name: Render Patroni config
+  copy:
+    dest: /etc/patroni/config.yml
+    owner: postgres
+    group: postgres
+    mode: 0644
+    content: |
+      scope: {{ patroni_cluster_name }}
+      name: {{ inventory_hostname }}
+
+      restapi:
+        listen: 0.0.0.0:{{ patroni_rest_port }}
+        connect_address: {{ ansible_host }}:{{ patroni_rest_port }}
+
+      postgresql:
+        listen: 0.0.0.0:5432
+        connect_address: {{ ansible_host }}:5432
+        data_dir: /var/lib/postgresql/{{ postgresql_version }}/main
+        bin_dir: /usr/lib/postgresql/{{ postgresql_version }}/bin
+        parameters:
+          shared_buffers: "512MB"
+          max_connections: 200
+        authentication:
+          superuser:
+            username: postgres
+            password: postgres
+          replication:
+            username: replicator
+            password: replicator
+
+      bootstrap:
+        dcs:
+          ttl: 30
+          loop_wait: 10
+          retry_timeout: 10
+          maximum_lag_on_failover: 1048576
+          postgresql:
+            use_pg_rewind: true
+            parameters:
+              shared_buffers: "512MB"
+              max_connections: 200
+        initdb:
+          - encoding: UTF8
+          - data-checksums
+        pg_hba:
+          - local all all trust
+          - host all all 127.0.0.1/32 trust
+          - host all all ::1/128 trust
+          - host replication replicator 10.20.0.0/24 md5
+          - host all all 10.20.0.0/24 md5
+
+      etcd:
+        host: 127.0.0.1:2379
+
+- name: Enable and start etcd
+  systemd:
+    name: etcd
+    enabled: yes
+    state: started
+
+- name: Enable and start Patroni
+  systemd:
+    name: patroni
+    enabled: yes
+    state: started
+
+- name: Wait for Patroni to start
+  wait_for:
+    port: "{{ patroni_rest_port }}"
+    host: "{{ ansible_host }}"
+    delay: 5
+    timeout: 60
+
+- name: Initialize PostgreSQL data directory (only on first node)
+  command: >
+    sudo -u postgres /usr/lib/postgresql/{{ postgresql_version }}/bin/initdb -D /var/lib/postgresql/{{ postgresql_version }}/main
+  args:
+    creates: /var/lib/postgresql/{{ postgresql_version }}/main/postgresql.conf
+  when: inventory_hostname == groups['patroni'][0]
+  ignore_errors: yes
+
+- name: Bootstrap Patroni cluster (only on first node)
+  command: >
+    sudo -u postgres patronictl -c /etc/patroni/config.yml bootstrap saleor-pg
+  args:
+    creates: /var/lib/postgresql/{{ postgresql_version }}/main/postgresql.base.conf
+  when: inventory_hostname == groups['patroni'][0]
+  ignore_errors: yes

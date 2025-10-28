@@ -1,0 +1,6 @@
+---
+storefront_deploy_dir: /opt/saleor-storefront
+storefront_version: "main"
+storefront_port: 3000
+storefront_api_url: "http://{{ hostvars[groups['haproxy'][0]].ansible_host }}/graphql/"
+storefront_dashboard_url: "http://{{ hostvars[groups['haproxy'][0]].ansible_host }}:9000/"
