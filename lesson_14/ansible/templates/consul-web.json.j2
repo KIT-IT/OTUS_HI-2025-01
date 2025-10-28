@@ -1,0 +1,17 @@
+{
+  "datacenter": "{{ consul_datacenter }}",
+  "data_dir": "/opt/consul/data",
+  "log_level": "{{ consul_log_level }}",
+  "bind_addr": "{{ consul_bind_ip }}",
+  "client_addr": "0.0.0.0",
+  "server": false,
+  "retry_join": {{ consul_server_ips | to_json }},
+  "node_name": "{{ inventory_hostname }}",
+  "leave_on_terminate": true,
+  "rejoin_after_leave": true,
+  "ports": {
+    "http": 8500
+  }
+}
+
+

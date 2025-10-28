@@ -1,0 +1,90 @@
+---
+- name: Install and configure Fluentd for log shipping
+  hosts: web_servers
+  become: yes
+  vars:
+    opensearch_host: "{{ hostvars[groups['opensearch_servers'][0]]['ansible_host_private'] }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - ruby
+          - ruby-dev
+          - build-essential
+        state: present
+
+    - name: Install Fluentd using gem
+      gem:
+        name: fluentd
+        user_install: no
+        state: present
+
+    - name: Install Fluentd plugin for OpenSearch
+      shell: /usr/local/bin/fluent-gem install fluent-plugin-opensearch
+      args:
+        creates: /var/lib/gems/2.7.0/gems/fluent-plugin-opensearch
+
+    - name: Create Fluentd user
+      user:
+        name: fluentd
+        system: yes
+        shell: /bin/false
+
+    - name: Create Fluentd directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: fluentd
+        group: fluentd
+        mode: '0755'
+      loop:
+        - /etc/fluent
+        - /var/log/fluent
+        - /var/run/fluent
+
+    - name: Create Fluentd configuration
+      template:
+        src: fluentd.conf.j2
+        dest: /etc/fluent/fluent.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create OpenSearch template file
+      template:
+        src: nginx-template.json.j2
+        dest: /etc/fluent/nginx-template.json
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Add fluentd user to adm group (to read nginx logs)
+      user:
+        name: fluentd
+        groups: adm
+        append: yes
+
+    - name: Create Fluentd systemd unit file
+      template:
+        src: fluentd.service.j2
+        dest: /etc/systemd/system/fluentd.service
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start Fluentd service
+      systemd:
+        name: fluentd
+        enabled: yes
+        state: started
+
