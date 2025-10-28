@@ -1,0 +1,16 @@
+[Unit]
+Description=Fluentd
+Documentation=https://www.fluentd.org/
+After=network.target
+
+[Service]
+User=fluentd
+Group=fluentd
+Type=simple
+ExecStart=/usr/local/bin/fluentd -c /etc/fluent/fluent.conf -p /var/lib/gems/2.7.0/gems
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+

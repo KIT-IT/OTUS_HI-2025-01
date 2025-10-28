@@ -1,0 +1,44 @@
+{
+  "index_patterns": ["nginx*"],
+  "template": {
+    "settings": {
+      "index": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0
+      }
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": {
+          "type": "date"
+        },
+        "timestamp": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss Z"
+        },
+        "hostname": {
+          "type": "keyword"
+        },
+        "log_type": {
+          "type": "keyword"
+        },
+        "method": {
+          "type": "keyword"
+        },
+        "path": {
+          "type": "keyword"
+        },
+        "code": {
+          "type": "keyword"
+        },
+        "remote": {
+          "type": "ip"
+        },
+        "agent": {
+          "type": "text"
+        }
+      }
+    }
+  }
+}
+

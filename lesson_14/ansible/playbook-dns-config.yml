@@ -1,0 +1,49 @@
+---
+- name: Configure DNS for Consul client
+  hosts: consul_clients
+  become: yes
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - systemd-resolved
+          - dig
+        state: present
+
+    - name: Get Consul client private IP
+      set_fact:
+        consul_client_ip: "{{ ansible_default_ipv4.address }}"
+
+    - name: Backup systemd-resolved.conf
+      copy:
+        src: /etc/systemd/resolved.conf
+        dest: /etc/systemd/resolved.conf.backup
+        remote_src: yes
+      when: not lookup('file', '/etc/systemd/resolved.conf.backup', errors='ignore')
+
+    - name: Configure systemd-resolved to use Consul DNS
+      template:
+        src: resolved.conf.j2
+        dest: /etc/systemd/resolved.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart systemd-resolved
+
+    - name: Test DNS resolution
+      shell: dig @{{ consul_client_ip }} -p 8600 saleor.service.consul
+      register: dns_test
+      changed_when: false
+
+    - name: Show DNS test result
+      debug:
+        var: dns_test.stdout_lines
+
+  handlers:
+    - name: restart systemd-resolved
+      systemd:
+        name: systemd-resolved
+        state: restarted
+
+

@@ -1,0 +1,75 @@
+---
+- name: Install OpenSearch and Dashboard
+  hosts: opensearch_servers
+  become: yes
+  vars:
+    opensearch_version: "2.11.1"
+    opensearch_dashboard_version: "2.11.0"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - python3-pip
+        state: present
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Create OpenSearch data directory
+      file:
+        path: /opt/opensearch/data
+        state: directory
+        mode: '0755'
+
+    - name: Create OpenSearch config
+      file:
+        path: /opt/opensearch/config
+        state: directory
+        mode: '0755'
+
+    - name: Create Docker Compose file for OpenSearch
+      template:
+        src: docker-compose-opensearch.yml.j2
+        dest: /opt/opensearch/docker-compose.yml
+        mode: '0644'
+
+    - name: Start OpenSearch stack
+      shell: cd /opt/opensearch && docker-compose up -d
+      args:
+        creates: /opt/opensearch/.started
+      async: 120
+      poll: 10
+
+    - name: Wait for OpenSearch to be ready
+      uri:
+        url: http://localhost:9200
+        method: GET
+        status_code: [200, 401]
+      register: result
+      until: result.status in [200, 401]
+      retries: 30
+      delay: 10
+
+    - name: Display OpenSearch version
+      uri:
+        url: http://localhost:9200
+        method: GET
+      register: opensearch_info
+      changed_when: false
+
+    - name: Show OpenSearch info
+      debug:
+        var: opensearch_info.json
+      changed_when: false
+
