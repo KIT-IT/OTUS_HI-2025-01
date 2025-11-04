@@ -1,0 +1,53 @@
+---
+- name: Remove old Elastic repository if exists (to avoid apt errors)
+  file:
+    path: /etc/apt/sources.list.d/elastic-8.x.list
+    state: absent
+  ignore_errors: yes
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install nginx (latest available)
+  apt:
+    name: nginx
+    state: latest
+    update_cache: yes
+    allow_unauthenticated: no
+
+- name: Ensure wordpress log directory exists (for log agent)
+  file:
+    path: /var/log/wordpress
+    state: directory
+    mode: '0755'
+
+- name: Create placeholder wordpress log file
+  copy:
+    dest: /var/log/wordpress/app.log
+    content: |
+      {{ ansible_date_time.iso8601 }} INFO wordpress placeholder log initialized
+    mode: '0644'
+    force: no
+
+- name: Deploy simple index.html
+  copy:
+    dest: /var/www/html/index.html
+    content: |
+      <html>
+      <head><title>OTUS APP Node</title></head>
+      <body>
+      <h1>NGINX on APP node</h1>
+      <p>Host: {{ inventory_hostname }} ({{ ansible_default_ipv4.address }})</p>
+      <p>Time: {{ ansible_date_time.iso8601 }}</p>
+      </body>
+      </html>
+    mode: '0644'
+
+- name: Ensure nginx is started and enabled
+  service:
+    name: nginx
+    state: started
+    enabled: yes
+

@@ -1,0 +1,20 @@
+---
+- name: Deploy Kafka (two brokers on single node)
+  hosts: kafka
+  become: yes
+  roles:
+    - kafka
+
+- name: Deploy APP (nginx + log agent)
+  hosts: app
+  become: yes
+  roles:
+    - app
+    - log-agent
+
+- name: Deploy ELK stack on elk node
+  hosts: elk
+  become: yes
+  roles:
+    - elk
+
