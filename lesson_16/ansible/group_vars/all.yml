@@ -1,0 +1,19 @@
+kafka_broker_1_port: 9092
+kafka_broker_2_port: 9093
+
+# Bootstrap servers для подключения к Kafka
+kafka_bootstrap_servers: >-
+  {{ hostvars['kafka']['ansible_host'] }}:{{ kafka_broker_1_port }},{{ hostvars['kafka']['ansible_host'] }}:{{ kafka_broker_2_port }}
+
+kafka_topics:
+  - name: nginx
+    partitions: 2
+    replication_factor: 2
+  - name: wordpress
+    partitions: 2
+    replication_factor: 2
+
+elasticsearch_version: "8.15.3"
+kibana_version: "8.15.3"
+logstash_version: "8.15.3"
+

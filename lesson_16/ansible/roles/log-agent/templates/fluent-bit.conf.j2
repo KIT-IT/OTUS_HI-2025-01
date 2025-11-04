@@ -1,0 +1,50 @@
+[SERVICE]
+    Flush        1
+    Daemon       Off
+    Log_Level    info
+
+[INPUT]
+    Name        tail
+    Path        /var/log/nginx/access.log
+    Tag         nginx.access
+    Refresh_Interval 5
+    Skip_Long_Lines On
+
+[INPUT]
+    Name        tail
+    Path        /var/log/nginx/error.log
+    Tag         nginx.error
+    Refresh_Interval 5
+    Skip_Long_Lines On
+
+[INPUT]
+    Name        tail
+    Path        /var/log/wordpress/*.log
+    Tag         wordpress
+    Refresh_Interval 5
+    Skip_Long_Lines On
+
+[FILTER]
+    Name        modify
+    Match       nginx.*
+    Add         source_type nginx
+
+[FILTER]
+    Name        modify
+    Match       wordpress
+    Add         source_type wordpress
+
+[OUTPUT]
+    Name        kafka
+    Match       nginx.*
+    Brokers     {{ hostvars['kafka']['ansible_host'] }}:9092,{{ hostvars['kafka']['ansible_host'] }}:9093
+    Topics      nginx
+    rdkafka.log.connection.close false
+
+[OUTPUT]
+    Name        kafka
+    Match       wordpress
+    Brokers     {{ hostvars['kafka']['ansible_host'] }}:9092,{{ hostvars['kafka']['ansible_host'] }}:9093
+    Topics      wordpress
+    rdkafka.log.connection.close false
+
