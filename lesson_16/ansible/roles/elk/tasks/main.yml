@@ -1,0 +1,191 @@
+---
+- name: Install prerequisites
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+    state: present
+    update_cache: yes
+
+- name: Install Docker repository key
+  shell: |
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+  args:
+    creates: /etc/apt/keyrings/docker.gpg
+
+- name: Remove old malformed Docker repo file if exists
+  file:
+    path: /etc/apt/sources.list.d/docker.list
+    state: absent
+
+- name: Add Docker apt repository
+  apt_repository:
+    repo: "deb [arch={{ 'amd64' if ansible_architecture in ['x86_64','amd64'] else ansible_architecture }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable"
+    state: present
+
+- name: Install Docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+
+- name: Ensure docker service is running
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Create ELK compose directory
+  file:
+    path: /opt/elk
+    state: directory
+    mode: '0755'
+
+- name: Create Logstash pipeline directory
+  file:
+    path: /opt/elk/logstash/pipeline
+    state: directory
+    mode: '0755'
+    recurse: yes
+
+- name: Deploy ELK docker-compose
+  copy:
+    dest: /opt/elk/docker-compose.yml
+    content: |
+      version: '2'
+      services:
+        opensearch:
+          image: opensearchproject/opensearch:2.14.0
+          container_name: opensearch
+          environment:
+            - discovery.type=single-node
+            - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+            - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=OpenSearch2025!Strong"
+            - "DISABLE_INSTALL_DEMO_CONFIG=true"
+            - "DISABLE_SECURITY_PLUGIN=true"
+          ulimits:
+            memlock:
+              soft: -1
+              hard: -1
+          volumes:
+            - esdata:/usr/share/opensearch/data
+          ports:
+            - "9200:9200"
+          restart: unless-stopped
+
+        logstash:
+          image: opensearchproject/logstash-oss-with-opensearch-output-plugin:latest
+          container_name: logstash
+          volumes:
+            - /opt/elk/logstash/pipeline:/usr/share/logstash/pipeline
+          ports:
+            - "5044:5044"
+          depends_on:
+            - opensearch
+          restart: unless-stopped
+
+        dashboards:
+          image: opensearchproject/opensearch-dashboards:2.14.0
+          container_name: dashboards
+          environment:
+            - OPENSEARCH_HOSTS=http://opensearch:9200
+            - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+          ports:
+            - "5601:5601"
+          depends_on:
+            - opensearch
+          restart: unless-stopped
+
+      volumes:
+        esdata: {}
+
+- name: Deploy Logstash pipeline config
+  copy:
+    dest: /opt/elk/logstash/pipeline/logstash.conf
+    content: |
+      input {
+        kafka {
+          bootstrap_servers => "{{ kafka_bootstrap_servers }}"
+          topics => ["nginx", "wordpress"]
+          group_id => "logstash"
+          codec => json
+        }
+      }
+      filter {
+        if [source_type] == "nginx" {
+          mutate { add_field => { "[@metadata][index]" => "nginx-%{+YYYY.MM.dd}" } }
+        } else if [source_type] == "wordpress" {
+          mutate { add_field => { "[@metadata][index]" => "wordpress-%{+YYYY.MM.dd}" } }
+        } else {
+          mutate { add_field => { "[@metadata][index]" => "other-%{+YYYY.MM.dd}" } }
+        }
+      }
+      output {
+        opensearch {
+          hosts => ["http://opensearch:9200"]
+          index => "%{[@metadata][index]}"
+          ssl => false
+        }
+        stdout { codec => rubydebug }
+      }
+
+- name: Start ELK stack
+  shell: docker compose -f /opt/elk/docker-compose.yml up -d
+  args:
+    chdir: /opt/elk
+
+- name: Wait for Dashboards to be up
+  wait_for:
+    host: "{{ hostvars['elk']['ansible_host'] }}"
+    port: 5601
+    timeout: 180
+
+- name: Create Dashboards index pattern for nginx
+  uri:
+    url: "http://{{ hostvars['elk']['ansible_host'] }}:5601/api/saved_objects/index-pattern/nginx-*"
+    method: POST
+    headers:
+      kbn-xsrf: "true"
+      Content-Type: "application/json"
+    status_code: [200, 409]
+    body_format: json
+    body:
+      attributes:
+        title: "nginx-*"
+        timeFieldName: "@timestamp"
+  register: create_nginx_pattern
+  retries: 15
+  delay: 10
+  until: create_nginx_pattern.status in [200, 409]
+  ignore_errors: yes
+
+- name: Create Dashboards index pattern for wordpress
+  uri:
+    url: "http://{{ hostvars['elk']['ansible_host'] }}:5601/api/saved_objects/index-pattern/wordpress-*"
+    method: POST
+    headers:
+      kbn-xsrf: "true"
+      Content-Type: "application/json"
+    status_code: [200, 409]
+    body_format: json
+    body:
+      attributes:
+        title: "wordpress-*"
+        timeFieldName: "@timestamp"
+  register: create_wordpress_pattern
+  retries: 15
+  delay: 10
+  until: create_wordpress_pattern.status in [200, 409]
+  ignore_errors: yes
+
