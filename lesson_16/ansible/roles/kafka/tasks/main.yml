@@ -1,0 +1,143 @@
+---
+- name: Remove malformed Docker repo file before apt usage (if any)
+  file:
+    path: /etc/apt/sources.list.d/docker.list
+    state: absent
+
+- name: Install prerequisites
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+    state: present
+    update_cache: yes
+
+- name: Install Docker repository key
+  shell: |
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+  args:
+    creates: /etc/apt/keyrings/docker.gpg
+
+- name: Remove old malformed Docker repo file if exists
+  file:
+    path: /etc/apt/sources.list.d/docker.list
+    state: absent
+
+- name: Add Docker apt repository
+  apt_repository:
+    repo: "deb [arch={{ 'amd64' if ansible_architecture in ['x86_64','amd64'] else ansible_architecture }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable"
+    state: present
+
+- name: Install Docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+
+- name: Ensure docker service is running
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Create Kafka compose directory
+  file:
+    path: /opt/kafka
+    state: directory
+    mode: '0755'
+
+- name: Deploy docker-compose for Kafka (2 brokers KRaft)
+  copy:
+    dest: /opt/kafka/docker-compose.yml
+    content: |
+      version: '3.8'
+      services:
+        kafka-1:
+          image: confluentinc/cp-kafka:7.6.1
+          container_name: kafka-1
+          environment:
+            - CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
+            - KAFKA_CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
+            - KAFKA_NODE_ID=1
+            - KAFKA_PROCESS_ROLES=broker,controller
+            - KAFKA_CONTROLLER_QUORUM_VOTERS=1@{{ hostvars['kafka']['ansible_host'] }}:9094,2@{{ hostvars['kafka']['ansible_host'] }}:9194
+            - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9094
+            - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://{{ hostvars['kafka']['ansible_host'] }}:9092
+            - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+            - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+            - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=2
+            - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=2
+            - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+          network_mode: host
+          restart: unless-stopped
+
+        kafka-2:
+          image: confluentinc/cp-kafka:7.6.1
+          container_name: kafka-2
+          environment:
+            - CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
+            - KAFKA_CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
+            - KAFKA_NODE_ID=2
+            - KAFKA_PROCESS_ROLES=broker,controller
+            - KAFKA_CONTROLLER_QUORUM_VOTERS=1@{{ hostvars['kafka']['ansible_host'] }}:9094,2@{{ hostvars['kafka']['ansible_host'] }}:9194
+            - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9093,CONTROLLER://0.0.0.0:9194
+            - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://{{ hostvars['kafka']['ansible_host'] }}:9093
+            - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+            - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+            - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=2
+            - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=2
+            - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+          network_mode: host
+          restart: unless-stopped
+
+- name: Pull images and start Kafka
+  shell: docker compose -f /opt/kafka/docker-compose.yml up -d
+  args:
+    chdir: /opt/kafka
+  register: kafka_start
+
+- name: Wait for Kafka containers to be running
+  shell: docker ps | grep -q kafka-1 && docker ps | grep -q kafka-2
+  register: kafka_running
+  until: kafka_running.rc == 0
+  retries: 30
+  delay: 3
+  ignore_errors: yes
+
+- name: Wait for Kafka broker 1 to be ready
+  wait_for:
+    host: "{{ hostvars['kafka']['ansible_host'] }}"
+    port: 9092
+    timeout: 180
+    delay: 10
+
+- name: Wait for Kafka broker 2 to be ready
+  wait_for:
+    host: "{{ hostvars['kafka']['ansible_host'] }}"
+    port: 9093
+    timeout: 180
+    delay: 10
+
+- name: Create Kafka topics
+  shell: |
+    docker run --rm --network host confluentinc/cp-kafka:7.6.1 kafka-topics \
+      --bootstrap-server {{ kafka_bootstrap_servers }} \
+      --create --if-not-exists \
+      --topic {{ item.name }} \
+      --partitions {{ item.partitions }} \
+      --replication-factor {{ item.replication_factor }}
+  loop: "{{ kafka_topics }}"
+  retries: 5
+  delay: 10
+

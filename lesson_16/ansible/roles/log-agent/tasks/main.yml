@@ -1,0 +1,41 @@
+---
+- name: Install prerequisites
+  apt:
+    name:
+      - curl
+      - gnupg
+      - apt-transport-https
+    state: present
+    update_cache: yes
+
+- name: Add Fluent Bit GPG key
+  shell: |
+    curl -fsSL https://packages.fluentbit.io/fluentbit.key | gpg --dearmor -o /usr/share/keyrings/fluentbit.gpg
+  args:
+    creates: /usr/share/keyrings/fluentbit.gpg
+
+- name: Add Fluent Bit APT repository
+  copy:
+    dest: /etc/apt/sources.list.d/fluent-bit.list
+    content: |
+      deb [signed-by=/usr/share/keyrings/fluentbit.gpg] https://packages.fluentbit.io/ubuntu/focal focal main
+    mode: '0644'
+
+- name: Install Fluent Bit
+  apt:
+    name: fluent-bit
+    state: present
+    update_cache: yes
+
+- name: Deploy Fluent Bit config
+  template:
+    src: fluent-bit.conf.j2
+    dest: /etc/fluent-bit/fluent-bit.conf
+    mode: '0644'
+
+- name: Enable and restart Fluent Bit
+  service:
+    name: fluent-bit
+    state: restarted
+    enabled: yes
+
