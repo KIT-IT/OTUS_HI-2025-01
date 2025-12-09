@@ -1,0 +1,27 @@
+# Proxmox connection settings (use token or username/password)
+proxmox_api_url      = "https://your-proxmox-server:8006/api2/json"
+proxmox_username     = "root@pam"
+proxmox_password     = "your-password"
+proxmox_tls_insecure = true
+proxmox_debug        = false
+proxmox_node_name    = "pve"
+
+# Container settings
+ct_hostname         = "terraform-ct"
+ct_cpu_cores        = 2
+ct_memory           = 1024 # MB
+ct_disk_datastore   = "local-lvm"
+ct_disk_size        = 8    # GB
+ct_network_bridge   = "vmbr0"
+ct_ip_address       = "dhcp"               # or "192.168.1.100/24"
+ct_gateway          = "192.168.1.1"        # leave empty if dhcp
+ct_template_file_id = "local:vztmpl/almalinux-10-default_20250930_amd64.tar.xz"
+ct_os_type          = "debian"
+ct_swap             = 512
+ct_root_password    = "changeme"
+ct_tags             = ["terraform", "otus", "lesson19"]
+
+# SSH key - можно указать либо содержимое ключа, либо путь к файлу
+ssh_public_key_file = "~/.ssh/id_ed25519.pub"
+# ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..."
+
