@@ -1,0 +1,84 @@
+# ============================================================================
+# Proxmox Connection Settings
+# ============================================================================
+proxmox_api_url      = "https://your-proxmox-server:8006/api2/json"
+proxmox_username     = "root@pam"
+proxmox_password     = "your-password"
+proxmox_node_name    = "proxmox"
+proxmox_tls_insecure = true
+
+# ============================================================================
+# Common Container Settings
+# ============================================================================
+domain_name          = "nix.netlab.local"
+ct_template_file_id  = "local:vztmpl/almalinux-10-default_20250930_amd64.tar.xz"
+ct_os_type          = "debian"
+ct_root_password    = "changeme"
+ct_user_name        = "sedunovsv"
+ct_user_password    = "changeme"
+common_tags         = ["terraform", "project", "otus"]
+
+# SSH Key - можно указать либо содержимое ключа, либо путь к файлу
+ssh_public_key_file = "~/.ssh/id_ed25519.pub"
+# ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..."
+
+# ============================================================================
+# Network Settings
+# ============================================================================
+network_bridge = "vmbr0"
+network_gateway = "192.168.50.1"
+
+# ============================================================================
+# HAProxy + keepalived Settings
+# ============================================================================
+haproxy_cpu_cores   = 1
+haproxy_memory      = 512
+haproxy_swap        = 256
+haproxy_disk_datastore = "local-lvm"
+haproxy_disk_size   = 10
+haproxy_ip_addresses = ["192.168.50.11/24", "192.168.50.12/24"]
+haproxy_vmids       = [100, 101]
+
+# ============================================================================
+# PostgreSQL + Patroni Settings
+# ============================================================================
+postgres_cpu_cores   = 2
+postgres_memory      = 2048
+postgres_swap        = 512
+postgres_disk_datastore = "local-lvm"
+postgres_disk_size   = 25
+postgres_ip_addresses = ["192.168.50.21/24", "192.168.50.22/24", "192.168.50.23/24"]
+postgres_vmids       = [102, 103, 104]
+
+# ============================================================================
+# Docker Swarm Manager Settings
+# ============================================================================
+docker_manager_cpu_cores   = 2
+docker_manager_memory      = 1536
+docker_manager_swap        = 512
+docker_manager_disk_datastore = "local-lvm"
+docker_manager_disk_size   = 20
+docker_manager_ip_addresses = ["192.168.50.31/24", "192.168.50.32/24"]
+docker_manager_vmids       = [105, 106]
+
+# ============================================================================
+# Docker Swarm Worker Settings
+# ============================================================================
+docker_worker_cpu_cores   = 4
+docker_worker_memory      = 3072
+docker_worker_swap        = 1024
+docker_worker_disk_datastore = "local-lvm"
+docker_worker_disk_size   = 20
+docker_worker_ip_addresses = ["192.168.50.41/24", "192.168.50.42/24"]
+docker_worker_vmids       = [107, 108]
+
+# ============================================================================
+# etcd Settings
+# ============================================================================
+etcd_cpu_cores   = 2
+etcd_memory      = 2048
+etcd_swap        = 512
+etcd_disk_datastore = "local-lvm"
+etcd_disk_size   = 20
+etcd_ip_addresses = ["192.168.50.51/24", "192.168.50.52/24", "192.168.50.53/24"]
+etcd_vmids       = [109, 110, 111]

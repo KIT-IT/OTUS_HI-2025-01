@@ -1,0 +1,23 @@
+---
+- name: Установка и настройка etcd кластера
+  hosts: etcd
+  become: yes
+  roles:
+    - etcd
+
+- name: Установка и настройка PostgreSQL 18 с Patroni
+  hosts: postgresql
+  become: yes
+  vars:
+    use_patroni: true
+  roles:
+    - postgresql18
+    - patroni
+
+- name: Установка и настройка HAProxy
+  hosts: haproxy
+  become: yes
+  roles:
+    - haproxy
+    - keepalived
+

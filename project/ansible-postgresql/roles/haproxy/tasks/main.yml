@@ -1,0 +1,70 @@
+---
+- name: Установка HAProxy в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- dnf install -y haproxy
+  become: yes
+
+- name: Создание резервной копии конфигурации HAProxy в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak || true
+  become: yes
+  ignore_errors: yes
+
+- name: Создание конфигурационного файла HAProxy в CT {{ ct_id }}
+  template:
+    src: haproxy.cfg.j2
+    dest: "/tmp/haproxy.cfg"
+  delegate_to: localhost
+  become: no
+
+- name: Копирование конфигурационного файла HAProxy в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/haproxy.cfg /etc/haproxy/haproxy.cfg
+  become: yes
+
+- name: Копирование сертификата AM для HAProxy в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /root/docker_scripts/{{ am_cert_pem }} /etc/haproxy/{{ am_cert_pem }}
+  become: yes
+  ignore_errors: yes
+
+- name: Проверка конфигурации HAProxy в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- haproxy -f /etc/haproxy/haproxy.cfg -c
+  become: yes
+  register: haproxy_check
+  changed_when: false
+
+- name: Вывод результата проверки конфигурации HAProxy
+  debug:
+    msg: "{{ haproxy_check.stdout }}"
+
+- name: Включение и запуск HAProxy в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl enable haproxy
+    pct exec {{ ct_id }} -- systemctl restart haproxy
+  become: yes
+
+- name: Ожидание запуска HAProxy в CT {{ ct_id }}
+  wait_for:
+    port: "{{ haproxy_listen_port }}"
+    host: "{{ ct_ip }}"
+    delay: 5
+    timeout: 30
+
+- name: Проверка статуса HAProxy в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl status haproxy --no-pager
+  become: yes
+  register: haproxy_status
+  changed_when: false
+  ignore_errors: yes
+
+- name: Вывод статуса HAProxy
+  debug:
+    msg: "HAProxy запущен в CT {{ ct_id }}"
+
+
+
+
+

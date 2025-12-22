@@ -1,0 +1,3 @@
+---
+vault_ssh_password: "your_password_here"  # Замените на реальный пароль root для CT
+

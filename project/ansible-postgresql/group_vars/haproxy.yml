@@ -1,0 +1,22 @@
+---
+# Настройки HAProxy
+haproxy_listen_port: 5432
+haproxy_stats_port: 8404
+haproxy_stats_user: "admin"
+haproxy_stats_password: "admin123"
+
+# Настройки для Docker Swarm Manager балансировки
+docker_swarm_port: 2377
+docker_swarm_health_check_port: 2377
+
+# Настройки Keepalived
+keepalived_virtual_ip: "192.168.50.10"
+keepalived_interface: "eth0"
+keepalived_virtual_router_id: 50
+keepalived_authentication_password: "KeepAlive123!"
+keepalived_health_check_script: "/usr/local/bin/check_haproxy.sh"
+keepalived_health_check_interval: 2
+keepalived_health_check_fallback: 2
+keepalived_health_check_rise: 2
+
+

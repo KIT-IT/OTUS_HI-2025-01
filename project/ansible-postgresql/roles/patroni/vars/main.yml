@@ -1,0 +1,31 @@
+---
+patroni_version: "3.3.0"
+patroni_config_dir: "/etc/patroni"
+patroni_data_dir: "/var/lib/patroni"
+patroni_user: "postgres"
+patroni_scope: "postgres"
+patroni_namespace: "/patroni"
+patroni_restapi_port: 8008
+
+# Настройки PostgreSQL для Patroni
+patroni_postgresql_listen: "0.0.0.0:5432"
+patroni_postgresql_connect_address: "{{ ct_ip }}:5432"
+patroni_postgresql_data_dir: "/var/lib/pgsql/18/data"
+patroni_postgresql_bin_dir: "/usr/pgsql-18/bin"
+patroni_postgresql_pgpass: "/tmp/pgpass"
+
+# Настройки репликации
+patroni_replication_username: "replicator"
+patroni_replication_password: "Replicator123!"
+
+# Настройки суперпользователя
+patroni_superuser_username: "postgres"
+patroni_superuser_password: "Qwe1234!"
+
+# Настройки etcd
+patroni_etcd_hosts: "{{ groups['etcd'] | map('extract', hostvars, 'ct_ip') | map('regex_replace', '^(.*)$', '\\1:2379') | join(',') }}"
+
+
+
+
+
