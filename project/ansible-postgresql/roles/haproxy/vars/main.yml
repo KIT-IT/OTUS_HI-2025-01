@@ -1,0 +1,17 @@
+---
+haproxy_listen_port: 5432
+haproxy_stats_port: 8404
+haproxy_stats_user: "admin"
+haproxy_stats_password: "admin123"
+haproxy_cluster_name: "postgresql_cluster"
+docker_swarm_port: 2377
+
+# AM HTTPS frontend (HAProxy -> Docker Swarm managers -> AM service)
+am_https_port: в          # внешний порт HAProxy для AM (клиенты подключаются сюда)
+am_backend_port_mgr1: 37443   # порт AM на docker_mgr1 (192.168.50.31) - фактически слушает 37443
+am_backend_port_mgr2: 37444  # порт AM на docker_mgr2 (192.168.50.32) - фактически слушает 37444
+am_cert_pem: "haproxy_ssl.pem"  # сертификат/ключ в формате PEM, лежит в /root/docker_scripts на Proxmox
+
+
+
+

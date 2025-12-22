@@ -1,0 +1,27 @@
+{{ define "telegram.default" }}
+{{ if eq .Status "firing" }}🚨 <b>ALERT FIRING</b>🚨{{ else }}✅ <b>ALERT RESOLVED</b>✅{{ end }}
+
+{{ range .Alerts }}
+<b>Alert:</b> {{ .Labels.alertname }}
+<b>Severity:</b> {{ .Labels.severity }}
+<b>Instance:</b> {{ .Labels.instance }}
+{{ if .Annotations.description }}
+<b>Description:</b> {{ .Annotations.description }}
+{{ end }}
+{{ if .Annotations.summary }}
+<b>Summary:</b> {{ .Annotations.summary }}
+{{ end }}
+{{ if .Labels.job }}
+<b>Job:</b> {{ .Labels.job }}
+{{ end }}
+{{ if .Labels.node }}
+<b>Node:</b> {{ .Labels.node }}
+{{ end }}
+{{ if .StartsAt }}
+<b>Started:</b> {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+{{ end }}
+{{ if .EndsAt }}
+<b>Ended:</b> {{ .EndsAt.Format "2006-01-02 15:04:05" }}
+{{ end }}
+─────────────────────
+{{ end }}

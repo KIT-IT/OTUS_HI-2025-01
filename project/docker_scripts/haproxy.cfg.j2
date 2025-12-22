@@ -1,0 +1,109 @@
+global
+{% if haproxy_log_level is defined and (haproxy_log_level | length) > 0 -%}
+    log stdout local0 {{ haproxy_log_level }}
+{% else %}
+    log stdout local0 info
+{% endif %}
+    daemon
+    tune.ssl.default-dh-param 2048
+{% if haproxy_tls_options is defined and (haproxy_tls_options | length) > 0 -%}
+    ssl-default-bind-options {{ haproxy_tls_options }}
+{% else %}
+    ssl-default-bind-options ssl-min-ver TLSv1.2
+{% endif %}
+{% if haproxy_tls_options_cipherSuites is defined and (haproxy_tls_options_cipherSuites | length) > 0 -%}
+    ssl-default-bind-ciphers {{ haproxy_tls_options_ciphersuites }}
+{%- endif %}
+    maxconn 40000
+
+resolvers intdns
+    parse-resolv-conf
+    resolve_retries   3
+    timeout resolve   1s
+    timeout retry     1s
+    hold other        30s
+    hold refused      30s
+    hold nx           30s
+    hold timeout      30s
+    hold valid        10s
+
+defaults
+    log global
+
+    mode http
+    balance roundrobin
+    option redispatch
+    option httplog
+    option dontlognull
+    option log-health-checks
+
+    timeout connect {{ haproxy_timeout_connect }}
+    timeout client {{ haproxy_timeout_client }}
+    timeout server {{ haproxy_timeout_server }}
+
+    default-server inter {{ haproxy_default_server_inter }} rise {{ haproxy_default_server_rise }} fall {{ haproxy_default_server_fall }}
+
+
+listen health
+    mode http
+    bind 127.0.0.1:8888
+    http-request return status 200 if { src 127.0.0.0/8 }
+
+{% if (haproxy_stats_enable | bool) %}
+listen haproxy-stats
+    {% if haproxy_stats_published_port is defined and (haproxy_stats_published_port | int) > 0 -%}
+    bind *:{{ haproxy_stats_published_port }} ssl crt /etc/haproxy/{{ haproxy_cert_pem }}
+    {%- else -%}
+    bind *:8080 ssl crt /etc/haproxy/{{ haproxy_cert_pem }}
+    {%- endif %}
+
+    option dontlog-normal
+
+    stats enable
+    stats auth {{ haproxy_stats_user }}:{{ haproxy_stats_password }}
+    stats admin if TRUE
+    stats uri /
+    stats realm HAProxy\ Global\ Statistics
+{% if haproxy_mon_published_port is defined and (haproxy_mon_published_port | int) > 0 %}
+    stats scope mon-tcp-mode
+{% endif %}
+{% if haproxy_ig_published_port is defined and (haproxy_ig_published_port | int) > 0 %}
+    stats scope ig-https-mode
+{% endif %}
+    stats show-legends
+    stats show-modules
+    stats show-node
+    stats refresh 5s
+    {% if (haproxy_stats_hide_version | bool) -%}
+    stats hide-version
+    {%- endif %}
+{% endif %}
+
+frontend mon-tcp-mode
+    bind *:{{ haproxy_mon_published_port }}
+    option tcplog
+    mode tcp
+    log-format "[%T] %ci:%cp %f %b/$bi:%bp null null null null null \"TCP_STREAM\""
+    use_backend mon-tcp-mode-backend
+
+frontend ig-https-mode
+    bind *:{{ haproxy_ig_published_port }} ssl crt /etc/haproxy/haproxy_ssl.pem
+    http-request capture req.hdr(X-Correlation-Id) len 64
+    http-request capture req.hdr(User-Agent) len 128
+    option http-buffer-request
+    use_backend ig-https-mode-backend
+
+backend mon-tcp-mode-backend
+    mode tcp
+    option forwardfor
+    option tcplog
+{% for item in haproxy_mon_servers %}
+    server {{ item }} {{ item }} check
+{% endfor %}
+
+backend ig-https-mode-backend
+    balance roundrobin
+    option httpchk GET /health
+{% for item in haproxy_ig_servers %}
+    server {{ item }} {{ item }} ssl verify none check
+{% endfor %}

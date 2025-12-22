@@ -1,0 +1,69 @@
+scope: {{ patroni_scope }}
+namespace: {{ patroni_namespace }}
+name: {{ patroni_name }}
+
+restapi:
+  listen: {{ ct_ip }}:{{ patroni_restapi_port }}
+  connect_address: {{ ct_ip }}:{{ patroni_restapi_port }}
+
+etcd3:
+  hosts: {% for host in groups['etcd'] %}{{ hostvars[host]['ct_ip'] }}:2379{% if not loop.last %},{% endif %}{% endfor %}
+
+bootstrap:
+  dcs:
+    ttl: 60
+    loop_wait: 10
+    retry_timeout: 20
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        wal_keep_size: 512MB
+        max_wal_senders: 3
+        max_replication_slots: 10
+        wal_log_hints: "on"
+        archive_mode: "on"
+        archive_command: "mkdir -p /var/lib/pgsql/18/archive && cp %p /var/lib/pgsql/18/archive/%f"
+        archive_timeout: 300s
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+  pg_hba:
+    - host replication replicator 0.0.0.0/0 md5
+    - host all all 0.0.0.0/0 md5
+  users:
+    {{ patroni_replication_username }}:
+      password: {{ patroni_replication_password }}
+      options:
+        - replication
+    {{ patroni_superuser_username }}:
+      password: {{ patroni_superuser_password }}
+      options:
+        - createrole
+        - createdb
+
+postgresql:
+  listen: {{ patroni_postgresql_listen }}
+  connect_address: {{ patroni_postgresql_connect_address }}
+  data_dir: {{ patroni_postgresql_data_dir }}
+  bin_dir: {{ patroni_postgresql_bin_dir }}
+  pgpass: {{ patroni_postgresql_pgpass }}
+  authentication:
+    replication:
+      username: {{ patroni_replication_username }}
+      password: {{ patroni_replication_password }}
+    superuser:
+      username: {{ patroni_superuser_username }}
+      password: {{ patroni_superuser_password }}
+  parameters:
+    unix_socket_directories: '/var/run/postgresql'
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+

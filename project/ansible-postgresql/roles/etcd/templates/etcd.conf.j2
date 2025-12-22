@@ -1,0 +1,15 @@
+# etcd configuration file
+ETCD_NAME={{ etcd_name }}
+ETCD_DATA_DIR={{ etcd_data_dir }}
+ETCD_LISTEN_CLIENT_URLS=http://{{ ct_ip }}:{{ etcd_client_port }},http://127.0.0.1:{{ etcd_client_port }}
+ETCD_ADVERTISE_CLIENT_URLS=http://{{ ct_ip }}:{{ etcd_client_port }}
+ETCD_LISTEN_PEER_URLS=http://{{ ct_ip }}:{{ etcd_peer_port }}
+ETCD_INITIAL_ADVERTISE_PEER_URLS=http://{{ ct_ip }}:{{ etcd_peer_port }}
+ETCD_INITIAL_CLUSTER={{ etcd_initial_cluster }}
+ETCD_INITIAL_CLUSTER_TOKEN={{ etcd_cluster_name }}-token
+ETCD_INITIAL_CLUSTER_STATE=new
+
+
+
+
+

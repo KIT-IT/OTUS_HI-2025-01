@@ -1,0 +1,141 @@
+---
+- name: Проверка ОС в CT {{ ct_id }}
+  shell: pct exec {{ ct_id }} -- cat /etc/os-release | grep -E "^ID=" | head -1
+  register: os_check
+  changed_when: false
+
+- name: Синхронизация времени в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- timedatectl set-ntp true || pct exec {{ ct_id }} -- ntpdate -s pool.ntp.org || true
+  become: yes
+  ignore_errors: yes
+
+- name: Обновление системы в CT {{ ct_id }}
+  shell: pct exec {{ ct_id }} -- dnf update -y
+  become: yes
+  ignore_errors: yes
+
+- name: Временное отключение всех репозиториев PostgreSQL в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- sed -i 's/^enabled=1/enabled=0/g' /etc/yum.repos.d/pgdg-redhat-all.repo || true
+  become: yes
+
+- name: Установка необходимых пакетов в CT {{ ct_id }}
+  shell: pct exec {{ ct_id }} -- dnf install -y --disablerepo="pgdg*" wget curl python3-pip
+  become: yes
+
+- name: Скачивание репозитория PostgreSQL
+  get_url:
+    url: "https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+    dest: "/tmp/pgdg-redhat-repo-latest.noarch.rpm"
+    mode: '0644'
+
+- name: Копирование репозитория в CT {{ ct_id }}
+  copy:
+    src: "/tmp/pgdg-redhat-repo-latest.noarch.rpm"
+    dest: "/tmp/pgdg-redhat-repo-latest.noarch.rpm"
+  delegate_to: localhost
+  become: no
+
+- name: Установка репозитория PostgreSQL в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/pgdg-redhat-repo-latest.noarch.rpm /tmp/pgdg-redhat-repo-latest.noarch.rpm
+    pct exec {{ ct_id }} -- rpm -Uvh /tmp/pgdg-redhat-repo-latest.noarch.rpm --nosignature || true
+  become: yes
+  ignore_errors: yes
+
+- name: Включение и настройка репозиториев PostgreSQL в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- sed -i 's/^enabled=0/enabled=1/g' /etc/yum.repos.d/pgdg-redhat-all.repo
+    pct exec {{ ct_id }} -- sed -i 's/gpgcheck=1/gpgcheck=0/g' /etc/yum.repos.d/pgdg-redhat-all.repo
+    pct exec {{ ct_id }} -- sed -i 's/repo_gpgcheck=1/repo_gpgcheck=0/g' /etc/yum.repos.d/pgdg-redhat-all.repo
+    pct exec {{ ct_id }} -- sed -i '/testing/s/enabled=1/enabled=0/g' /etc/yum.repos.d/pgdg-redhat-all.repo || true
+  become: yes
+
+- name: Установка PostgreSQL {{ postgresql_version }} в CT {{ ct_id }}
+  shell: pct exec {{ ct_id }} -- dnf install -y --nogpgcheck --disablerepo="*testing*" postgresql{{ postgresql_version }}-server postgresql{{ postgresql_version }}
+  become: yes
+
+- name: Проверка инициализации базы данных PostgreSQL в CT {{ ct_id }}
+  shell: pct exec {{ ct_id }} -- test -f {{ postgresql_data_dir }}/PG_VERSION && echo "exists" || echo "not_exists"
+  register: db_init_check
+  changed_when: false
+
+- name: Инициализация базы данных PostgreSQL в CT {{ ct_id }}
+  shell: pct exec {{ ct_id }} -- /usr/pgsql-{{ postgresql_version }}/bin/postgresql-{{ postgresql_version }}-setup initdb
+  become: yes
+  when: 
+    - "'not_exists' in db_init_check.stdout"
+    - use_patroni is not defined or not use_patroni
+
+- name: Настройка postgresql.conf в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- sed -i "s/^#*{{ item.key }}[[:space:]]*=.*/{{ item.key }} = {{ item.value }}/" {{ postgresql_data_dir }}/postgresql.conf || pct exec {{ ct_id }} -- bash -c "echo '{{ item.key }} = {{ item.value }}' >> {{ postgresql_data_dir }}/postgresql.conf"
+  become: yes
+  loop:
+    - { key: "listen_addresses", value: "{{ postgresql_listen_addresses }}" }
+    - { key: "port", value: "{{ postgresql_port }}" }
+    - { key: "wal_level", value: "replica" }
+    - { key: "max_wal_senders", value: "3" }
+    - { key: "max_replication_slots", value: "3" }
+    - { key: "hot_standby", value: "on" }
+    - { key: "hot_standby_feedback", value: "on" }
+
+- name: Настройка pg_hba.conf для сетевого доступа в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- bash -c "echo 'host    all             all             {{ item }}         md5' >> {{ postgresql_data_dir }}/pg_hba.conf"
+  become: yes
+  loop: "{{ postgresql_allowed_networks }}"
+  when: postgresql_allowed_networks is defined
+
+- name: Включение и запуск PostgreSQL в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl enable postgresql-{{ postgresql_version }}
+    pct exec {{ ct_id }} -- systemctl start postgresql-{{ postgresql_version }}
+  become: yes
+  when: use_patroni is not defined or not use_patroni
+
+- name: Ожидание запуска PostgreSQL в CT {{ ct_id }}
+  wait_for:
+    port: "{{ postgresql_port }}"
+    host: "{{ ct_ip }}"
+    delay: 5
+    timeout: 30
+  when: use_patroni is not defined or not use_patroni
+
+- name: Установка пароля для пользователя postgres в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- sudo -u postgres /usr/pgsql-{{ postgresql_version }}/bin/psql -c "ALTER USER postgres WITH PASSWORD '{{ postgresql_users[0].password }}';"
+  become: yes
+  when: 
+    - postgresql_users[0].name == "postgres"
+    - use_patroni is not defined or not use_patroni
+
+- name: Создание пользователей PostgreSQL в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- sudo -u postgres /usr/pgsql-{{ postgresql_version }}/bin/psql -c "CREATE USER {{ item.name }} WITH PASSWORD '{{ item.password }}'{% if item.createdb %} CREATEDB{% endif %}{% if item.superuser %} SUPERUSER{% endif %};" || pct exec {{ ct_id }} -- sudo -u postgres /usr/pgsql-{{ postgresql_version }}/bin/psql -c "ALTER USER {{ item.name }} WITH PASSWORD '{{ item.password }}';"
+  become: yes
+  loop: "{{ postgresql_users }}"
+  when: 
+    - item.name != "postgres"
+    - use_patroni is not defined or not use_patroni
+  ignore_errors: yes
+
+- name: Создание баз данных в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- sudo -u postgres /usr/pgsql-{{ postgresql_version }}/bin/psql -c "CREATE DATABASE {{ item.name }} OWNER {{ item.owner }};" || echo "База данных уже существует"
+  become: yes
+  loop: "{{ postgresql_databases }}"
+  when: use_patroni is not defined or not use_patroni
+  ignore_errors: yes
+
+- name: Проверка версии PostgreSQL в CT {{ ct_id }}
+  shell: pct exec {{ ct_id }} -- /usr/pgsql-{{ postgresql_version }}/bin/psql --version
+  register: postgresql_version_check
+  changed_when: false
+
+- name: Вывод версии PostgreSQL
+  debug:
+    msg: "PostgreSQL {{ postgresql_version_check.stdout }} установлен в CT {{ ct_id }}"
+
+
