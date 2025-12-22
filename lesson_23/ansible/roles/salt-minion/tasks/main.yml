@@ -1,0 +1,108 @@
+---
+# Роль для установки и настройки Salt Minion
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install prerequisites
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg
+      - lsb-release
+      - ca-certificates
+      - apt-transport-https
+      - python3
+      - python3-setuptools
+    state: present
+
+- name: Check if pip3 is already installed
+  command: which pip3
+  register: pip3_check
+  changed_when: false
+  failed_when: false
+
+- name: Install pip via get-pip.py (Python 3.8)
+  get_url:
+    url: https://bootstrap.pypa.io/pip/3.8/get-pip.py
+    dest: /tmp/get-pip.py
+    mode: '0755'
+  when: 
+    - ansible_python.version.major == 3
+    - ansible_python.version.minor == 8
+    - pip3_check.rc != 0
+
+- name: Run get-pip.py (Python 3.8)
+  command: python3 /tmp/get-pip.py
+  args:
+    creates: /usr/local/bin/pip3
+  when:
+    - ansible_python.version.major == 3
+    - ansible_python.version.minor == 8
+    - pip3_check.rc != 0
+
+- name: Get Salt Master internal IP from inventory
+  set_fact:
+    salt_master_ip: "{{ hostvars[groups['salt_master'][0]]['internal_ip'] | default(hostvars[groups['salt_master'][0]]['ansible_host']) }}"
+  when: inventory_hostname != groups['salt_master'][0]
+
+- name: Set Salt Master IP for Salt Master itself
+  set_fact:
+    salt_master_ip: "{{ ansible_default_ipv4.address }}"
+  when: inventory_hostname == groups['salt_master'][0]
+
+- name: Install Salt Minion via pip
+  pip:
+    name:
+      - salt==3006.1
+    state: present
+    executable: pip3
+
+- name: Create Salt Minion systemd service
+  template:
+    src: salt-minion.service.j2
+    dest: /etc/systemd/system/salt-minion.service
+    mode: '0644'
+  vars:
+    minion_master_ip: "{{ salt_master_ip }}"
+  notify: restart salt-minion
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Create Salt configuration directory
+  file:
+    path: /etc/salt
+    state: directory
+    mode: '0755'
+
+- name: Configure Salt Minion
+  template:
+    src: minion.conf.j2
+    dest: /etc/salt/minion
+    backup: yes
+    mode: '0644'
+  vars:
+    minion_master_ip: "{{ salt_master_ip }}"
+  notify: restart salt-minion
+
+- name: Ensure Salt Minion service is running and enabled
+  systemd:
+    name: salt-minion
+    state: started
+    enabled: yes
+
+- name: Check Salt Minion status
+  command: systemctl status salt-minion
+  register: salt_status
+  changed_when: false
+  failed_when: false
+
+- name: Display Salt Minion status
+  debug:
+    msg: "{{ salt_status.stdout_lines }}"
+

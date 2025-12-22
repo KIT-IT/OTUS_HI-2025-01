@@ -1,0 +1,8 @@
+---
+# Handlers для Salt Master
+
+- name: restart salt-master
+  systemd:
+    name: salt-master
+    state: restarted
+

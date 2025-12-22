@@ -1,0 +1,18 @@
+---
+# Handlers для SaltGUI
+
+- name: restart saltgui
+  systemd:
+    name: saltgui
+    state: restarted
+
+- name: restart salt-api
+  systemd:
+    name: salt-api
+    state: restarted
+
+- name: restart salt-master
+  systemd:
+    name: salt-master
+    state: restarted
+
