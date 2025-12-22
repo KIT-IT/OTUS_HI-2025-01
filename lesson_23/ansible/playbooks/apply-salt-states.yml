@@ -1,0 +1,25 @@
+---
+# Playbook для применения Salt States через Salt Master
+
+- name: Apply Salt States
+  hosts: salt_master
+  become: yes
+  tasks:
+    - name: Refresh Pillar data
+      command: salt '*' saltutil.refresh_pillar
+      register: refresh_result
+      changed_when: false
+
+    - name: Show Pillar refresh result
+      debug:
+        var: refresh_result.stdout_lines
+
+    - name: Apply Salt States to all minions
+      command: salt '*' state.apply
+      register: salt_apply_result
+      changed_when: "'changed' in salt_apply_result.stdout"
+
+    - name: Show Salt apply result
+      debug:
+        var: salt_apply_result.stdout_lines
+

@@ -1,0 +1,8 @@
+---
+# Handlers для Salt Minion
+
+- name: restart salt-minion
+  systemd:
+    name: salt-minion
+    state: restarted
+

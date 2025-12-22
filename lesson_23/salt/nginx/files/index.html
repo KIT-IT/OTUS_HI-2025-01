@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nginx Server - {{ grains.get('host', 'Unknown') }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        h1 { margin-top: 0; }
+        .info {
+            text-align: left;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Nginx Server</h1>
+        <p>Server: <strong>{{ grains.get('host', 'Unknown') }}</strong></p>
+        <p>Role: <strong>{{ grains.get('role', 'Unknown') }}</strong></p>
+        <div class="info">
+            <h3>Server Information:</h3>
+            <ul>
+                <li>Hostname: {{ grains.get('host', 'Unknown') }}</li>
+                <li>OS: {{ grains.get('os', 'Unknown') }}</li>
+                <li>Kernel: {{ grains.get('kernel', 'Unknown') }}</li>
+                <li>IP: {{ grains.get('ipv4', ['Unknown'])[0] }}</li>
+            </ul>
+        </div>
+        <p><a href="/health" style="color: #fff;">Health Check</a></p>
+    </div>
+</body>
+</html>
+

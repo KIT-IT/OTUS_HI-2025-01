@@ -1,0 +1,21 @@
+# Общие переменные для всех хостов
+
+# Salt Master настройки
+salt_master_interface: '0.0.0.0'
+salt_master_publish_port: 4505
+salt_master_ret_port: 4506
+salt_master_auto_accept: true  # Для тестирования, в продакшене false
+salt_master_log_level: 'info'
+salt_master_worker_threads: 5
+salt_master_timeout: 60
+
+# Salt Minion настройки
+salt_minion_master_port: 4506
+salt_minion_log_level: 'info'
+salt_minion_acceptance_wait_time: 10
+salt_minion_acceptance_wait_time_max: 0
+
+# Ansible настройки
+ansible_python_interpreter: /usr/bin/python3
+ansible_user: ubuntu
+

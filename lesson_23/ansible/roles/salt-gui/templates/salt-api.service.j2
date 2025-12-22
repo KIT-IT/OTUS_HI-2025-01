@@ -1,0 +1,14 @@
+[Unit]
+Description=The Salt API
+After=network.target salt-master.service
+Requires=salt-master.service
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/salt-api
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+

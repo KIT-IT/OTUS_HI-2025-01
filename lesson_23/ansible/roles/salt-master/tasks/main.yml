@@ -1,0 +1,72 @@
+---
+# Роль для установки и настройки Salt Master
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install prerequisites
+  apt:
+    name:
+      - curl
+      - wget
+      - gnupg
+      - lsb-release
+      - ca-certificates
+      - apt-transport-https
+      - python3-pip
+    state: present
+
+- name: Install Salt Master via pip
+  pip:
+    name:
+      - salt==3006.1
+    state: present
+    executable: pip3
+
+- name: Create Salt Master systemd service
+  template:
+    src: salt-master.service.j2
+    dest: /etc/systemd/system/salt-master.service
+    mode: '0644'
+  notify: restart salt-master
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Create Salt directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /srv/salt
+    - /srv/pillar
+    - /etc/salt
+
+- name: Configure Salt Master
+  template:
+    src: master.conf.j2
+    dest: /etc/salt/master
+    backup: yes
+    mode: '0644'
+  notify: restart salt-master
+
+- name: Ensure Salt Master service is running and enabled
+  systemd:
+    name: salt-master
+    state: started
+    enabled: yes
+
+- name: Check Salt Master status
+  command: systemctl status salt-master
+  register: salt_status
+  changed_when: false
+  failed_when: false
+
+- name: Display Salt Master status
+  debug:
+    msg: "{{ salt_status.stdout_lines }}"
+

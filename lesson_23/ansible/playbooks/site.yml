@@ -1,0 +1,90 @@
+---
+# Главный playbook для установки Salt и применения конфигураций
+
+- name: Install Salt Master
+  hosts: salt_master
+  become: yes
+  roles:
+    - salt-master
+    - salt-gui
+
+- name: Install Salt Minion on all servers
+  hosts: all
+  become: yes
+  roles:
+    - salt-minion
+
+- name: Copy Salt States and Pillar to Salt Master
+  hosts: salt_master
+  become: yes
+  tasks:
+    - name: Create Salt directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /srv/salt
+        - /srv/pillar
+
+    - name: Copy Salt States using synchronize
+      synchronize:
+        src: "{{ playbook_dir }}/../../salt/"
+        dest: /srv/salt/
+        delete: yes
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=*.pyc"
+      delegate_to: localhost
+      become: yes
+
+    - name: Copy Pillar data using synchronize
+      synchronize:
+        src: "{{ playbook_dir }}/../../pillar/"
+        dest: /srv/pillar/
+        delete: yes
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=*.pyc"
+      delegate_to: localhost
+      become: yes
+
+    - name: Set ownership for Salt directories
+      file:
+        path: "{{ item }}"
+        owner: root
+        group: root
+        mode: '0755'
+        recurse: yes
+      loop:
+        - /srv/salt
+        - /srv/pillar
+
+    - name: Restart Salt Master
+      systemd:
+        name: salt-master
+        state: restarted
+
+- name: Accept Salt Minion keys
+  hosts: salt_master
+  become: yes
+  tasks:
+    - name: Wait for minions to connect
+      pause:
+        seconds: 10
+        prompt: "Waiting for minions to connect..."
+
+    - name: Accept all pending keys
+      command: salt-key -A -y
+      register: salt_key_result
+      changed_when: "'Accepted' in salt_key_result.stdout"
+
+    - name: Show accepted keys
+      command: salt-key -L
+      register: salt_keys
+      changed_when: false
+
+    - name: Display accepted keys
+      debug:
+        msg: "{{ salt_keys.stdout_lines }}"
+

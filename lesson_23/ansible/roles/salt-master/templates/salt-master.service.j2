@@ -1,0 +1,15 @@
+[Unit]
+Description=The Salt Master Server
+After=network.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/salt-master
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+RestartSec=42s
+
+[Install]
+WantedBy=multi-user.target
+
