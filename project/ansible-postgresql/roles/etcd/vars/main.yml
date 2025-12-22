@@ -1,0 +1,13 @@
+---
+etcd_version: "3.5.13"
+etcd_data_dir: "/var/lib/etcd"
+etcd_user: "etcd"
+etcd_group: "etcd"
+etcd_client_port: 2379
+etcd_peer_port: 2380
+etcd_cluster_name: "patroni-cluster"
+
+
+
+
+

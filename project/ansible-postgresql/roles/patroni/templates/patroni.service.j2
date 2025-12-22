@@ -1,0 +1,21 @@
+[Unit]
+Description=Patroni PostgreSQL HA
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User={{ patroni_user }}
+Group={{ patroni_user }}
+ExecStart=/usr/local/bin/patroni {{ patroni_config_dir }}/patroni.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=process
+TimeoutSec=300
+Restart=on-failure
+RestartSec=10s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+
+
+

@@ -1,0 +1,169 @@
+groups:
+  - name: postgresql_alerts
+    interval: 30s
+    rules:
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL instance is down"
+          description: "PostgreSQL instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: PostgreSQLTooManyConnections
+        expr: sum(pg_stat_database_numbackends) by (instance) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL has too many connections"
+          description: "PostgreSQL instance {{ $labels.instance }} has {{ $value }} active connections."
+
+      - alert: PostgreSQLReplicationLag
+        expr: pg_replication_lag > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL replication lag is high"
+          description: "PostgreSQL replica {{ $labels.instance }} has a replication lag of {{ $value }} seconds."
+
+      - alert: PostgreSQLHighCPU
+        expr: rate(process_cpu_seconds_total{job="postgresql"}[5m]) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL CPU usage is high"
+          description: "PostgreSQL instance {{ $labels.instance }} CPU usage is above 80%."
+
+      - alert: PostgreSQLHighMemory
+        expr: (process_resident_memory_bytes{job="postgresql"} / 1024 / 1024 / 1024) > 8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL memory usage is high"
+          description: "PostgreSQL instance {{ $labels.instance }} is using {{ $value }}GB of memory."
+
+  - name: patroni_alerts
+    interval: 30s
+    rules:
+      - alert: PatroniDown
+        expr: up{job="patroni"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Patroni is down"
+          description: "Patroni instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: PatroniNotPrimary
+        expr: patroni_scope == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No Primary node in Patroni cluster"
+          description: "Patroni cluster has no Primary node for more than 5 minutes."
+
+  - name: etcd_alerts
+    interval: 30s
+    rules:
+      - alert: EtcdDown
+        expr: up{job="etcd"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "etcd instance is down"
+          description: "etcd instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: EtcdHighLeaderElectionRate
+        expr: rate(etcd_server_leader_changes_seen_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "etcd has high leader election rate"
+          description: "etcd cluster is experiencing frequent leader elections."
+
+      - alert: EtcdInsufficientMembers
+        expr: count(up{job="etcd"} == 1) < 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "etcd cluster has insufficient members"
+          description: "etcd cluster has only {{ $value }} healthy members (minimum 3 required)."
+
+  - name: haproxy_alerts
+    interval: 30s
+    rules:
+      - alert: HAProxyDown
+        expr: up{job="haproxy"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HAProxy instance is down"
+          description: "HAProxy instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: HAProxyBackendDown
+        expr: haproxy_backend_servers{state="down"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HAProxy backend server is down"
+          description: "HAProxy backend {{ $labels.backend }} has {{ $value }} down server(s)."
+
+  - name: system_alerts
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage on {{ $labels.instance }} is above 80% for 10 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage on {{ $labels.instance }} is above 85%."
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space on {{ $labels.instance }} is below 15%."
+
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk space"
+          description: "Disk space on {{ $labels.instance }} is below 10%."
+
+      - alert: NodeDown
+        expr: up{job=~"node-.*"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node is down"
+          description: "Node {{ $labels.instance }} has been down for more than 5 minutes."
+

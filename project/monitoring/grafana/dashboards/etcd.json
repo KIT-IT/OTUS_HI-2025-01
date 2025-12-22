@@ -1,0 +1,51 @@
+{
+  "dashboard": {
+    "title": "etcd Cluster",
+    "tags": ["etcd", "consensus"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "etcd Nodes Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "count(up{job=\"node-etcd\"} == 1)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 2, "color": "yellow"},
+                {"value": 3, "color": "green"}
+              ]
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "etcd Health",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "up{job=\"node-etcd\"}",
+            "format": "table",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}
+

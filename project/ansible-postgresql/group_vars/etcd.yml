@@ -1,0 +1,11 @@
+---
+# Список всех узлов etcd для формирования initial_cluster
+# etcd размещен на отдельных узлах 109, 110, 111
+etcd_cluster_nodes:
+  - name: etcd1
+    ip: 192.168.50.51
+  - name: etcd2
+    ip: 192.168.50.52
+  - name: etcd3
+    ip: 192.168.50.53
+

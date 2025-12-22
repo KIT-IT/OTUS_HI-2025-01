@@ -1,0 +1,67 @@
+---
+- name: Установка Keepalived в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- dnf install -y keepalived
+  become: yes
+
+- name: Создание скрипта проверки здоровья HAProxy
+  template:
+    src: check_haproxy.sh.j2
+    dest: "/tmp/check_haproxy.sh"
+  delegate_to: localhost
+  become: no
+
+- name: Копирование скрипта проверки здоровья HAProxy в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/check_haproxy.sh {{ keepalived_health_check_script }}
+    pct exec {{ ct_id }} -- chmod +x {{ keepalived_health_check_script }}
+  become: yes
+
+- name: Создание скрипта уведомлений Keepalived
+  template:
+    src: keepalived_notify.sh.j2
+    dest: "/tmp/keepalived_notify.sh"
+  delegate_to: localhost
+  become: no
+
+- name: Копирование скрипта уведомлений Keepalived в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/keepalived_notify.sh /usr/local/bin/keepalived_notify.sh
+    pct exec {{ ct_id }} -- chmod +x /usr/local/bin/keepalived_notify.sh
+  become: yes
+
+- name: Создание конфигурационного файла Keepalived
+  template:
+    src: keepalived.conf.j2
+    dest: "/tmp/keepalived.conf"
+  delegate_to: localhost
+  become: no
+
+- name: Копирование конфигурационного файла Keepalived в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/keepalived.conf /etc/keepalived/keepalived.conf
+  become: yes
+
+- name: Включение и запуск Keepalived в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl enable keepalived
+    pct exec {{ ct_id }} -- systemctl restart keepalived
+  become: yes
+
+- name: Ожидание запуска Keepalived в CT {{ ct_id }}
+  wait_for:
+    timeout: 10
+  delegate_to: localhost
+
+- name: Проверка статуса Keepalived в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl status keepalived --no-pager
+  become: yes
+  register: keepalived_status
+  changed_when: false
+  ignore_errors: yes
+
+- name: Вывод статуса Keepalived
+  debug:
+    msg: "Keepalived запущен в CT {{ ct_id }}"
+
