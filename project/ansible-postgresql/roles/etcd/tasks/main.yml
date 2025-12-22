@@ -1,0 +1,106 @@
+---
+- name: Установка tar в CT {{ ct_id }} (необходим для распаковки etcd)
+  shell: |
+    pct exec {{ ct_id }} -- dnf install -y tar || pct exec {{ ct_id }} -- yum install -y tar
+  become: yes
+  ignore_errors: yes
+
+- name: Создание пользователя etcd в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- useradd -r -s /sbin/nologin -d {{ etcd_data_dir }} {{ etcd_user }} || true
+  become: yes
+
+- name: Создание директории для данных etcd в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- mkdir -p {{ etcd_data_dir }}
+    pct exec {{ ct_id }} -- chown {{ etcd_user }}:{{ etcd_group }} {{ etcd_data_dir }}
+  become: yes
+
+- name: Скачивание etcd {{ etcd_version }}
+  get_url:
+    url: "https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+    dest: "/tmp/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+    mode: '0644'
+
+- name: Копирование архива etcd в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/etcd-v{{ etcd_version }}-linux-amd64.tar.gz /tmp/etcd-v{{ etcd_version }}-linux-amd64.tar.gz
+  become: yes
+
+- name: Распаковка etcd в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- tar -xzf /tmp/etcd-v{{ etcd_version }}-linux-amd64.tar.gz -C /tmp/
+    pct exec {{ ct_id }} -- cp /tmp/etcd-v{{ etcd_version }}-linux-amd64/etcd /usr/local/bin/etcd
+    pct exec {{ ct_id }} -- cp /tmp/etcd-v{{ etcd_version }}-linux-amd64/etcdctl /usr/local/bin/etcdctl
+    pct exec {{ ct_id }} -- chmod +x /usr/local/bin/etcd /usr/local/bin/etcdctl
+    pct exec {{ ct_id }} -- test -f /usr/local/bin/etcd && echo "etcd установлен успешно" || (echo "Ошибка установки etcd" && exit 1)
+    pct exec {{ ct_id }} -- rm -rf /tmp/etcd-v{{ etcd_version }}-linux-amd64*
+  become: yes
+
+- name: Создание директории для конфигурации etcd в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- mkdir -p /etc/etcd
+  become: yes
+
+- name: Формирование initial_cluster строки
+  set_fact:
+    etcd_initial_cluster: "{{ etcd_initial_cluster | default('') + ('' if etcd_initial_cluster | default('') == '' else ',') + hostvars[item]['etcd_name'] + '=http://' + hostvars[item]['ct_ip'] + ':' + etcd_peer_port|string }}"
+  loop: "{{ groups['etcd'] }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: Установка initial_cluster для всех узлов
+  set_fact:
+    etcd_initial_cluster: "{{ hostvars[groups['etcd'][0]]['etcd_initial_cluster'] }}"
+
+- name: Создание конфигурационного файла etcd в CT {{ ct_id }}
+  template:
+    src: etcd.conf.j2
+    dest: "/tmp/etcd.conf"
+  delegate_to: localhost
+  become: no
+
+- name: Копирование конфигурационного файла в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/etcd.conf /etc/etcd/etcd.conf
+    pct exec {{ ct_id }} -- chown {{ etcd_user }}:{{ etcd_group }} /etc/etcd/etcd.conf
+  become: yes
+
+- name: Создание systemd сервиса для etcd в CT {{ ct_id }}
+  template:
+    src: etcd.service.j2
+    dest: "/tmp/etcd.service"
+  delegate_to: localhost
+  become: no
+
+- name: Копирование systemd сервиса в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/etcd.service /etc/systemd/system/etcd.service
+    pct exec {{ ct_id }} -- systemctl daemon-reload
+  become: yes
+
+- name: Включение и запуск etcd в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl enable etcd
+    pct exec {{ ct_id }} -- systemctl start etcd
+  become: yes
+
+- name: Ожидание запуска etcd в CT {{ ct_id }}
+  wait_for:
+    port: "{{ etcd_client_port }}"
+    host: "{{ ct_ip }}"
+    delay: 5
+    timeout: 30
+
+- name: Проверка статуса etcd в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- etcdctl endpoint health --endpoints=http://{{ ct_ip }}:{{ etcd_client_port }}
+  become: yes
+  register: etcd_health
+  changed_when: false
+  ignore_errors: yes
+
+- name: Вывод статуса etcd
+  debug:
+    msg: "etcd запущен в CT {{ ct_id }}: {{ etcd_health.stdout | default('Проверка выполнена') }}"
+

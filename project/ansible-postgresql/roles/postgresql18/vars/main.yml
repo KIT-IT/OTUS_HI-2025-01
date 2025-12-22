@@ -1,0 +1,29 @@
+---
+postgresql_version: "18"
+postgresql_port: 5432
+postgresql_data_dir: "/var/lib/pgsql/{{ postgresql_version }}/data"
+
+# Пользователи PostgreSQL
+postgresql_users:
+  - name: postgres
+    password: "Qwe1234!"
+    superuser: true
+  - name: sqlUser
+    password: "Qwe1234!"
+    createdb: true
+
+# Базы данных
+postgresql_databases:
+  - name: sqluser_db
+    owner: sqlUser
+
+# Настройки репликации (для будущего использования)
+postgresql_replication_user: replicator
+postgresql_replication_password: "Replicator123!"
+
+# Сеть
+postgresql_listen_addresses: "*"
+postgresql_allowed_networks:
+  - "192.168.50.0/24"
+
+

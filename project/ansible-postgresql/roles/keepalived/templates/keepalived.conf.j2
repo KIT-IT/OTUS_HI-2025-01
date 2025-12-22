@@ -1,0 +1,37 @@
+global_defs {
+    router_id LVS_DEVEL
+    script_user root
+    enable_script_security
+}
+
+vrrp_script check_haproxy {
+    script "{{ keepalived_health_check_script }}"
+    interval {{ keepalived_health_check_interval }}
+    fall {{ keepalived_health_check_fallback }}
+    rise {{ keepalived_health_check_rise }}
+    timeout 2
+    weight -2
+}
+
+vrrp_instance VI_1 {
+    state {{ keepalived_state }}
+    interface {{ keepalived_interface }}
+    virtual_router_id {{ keepalived_virtual_router_id }}
+    priority {{ keepalived_priority }}
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass {{ keepalived_authentication_password }}
+    }
+    virtual_ipaddress {
+        {{ keepalived_virtual_ip }}/24
+    }
+    track_script {
+        check_haproxy
+    }
+    notify_master "/usr/local/bin/keepalived_notify.sh master"
+    notify_backup "/usr/local/bin/keepalived_notify.sh backup"
+    notify_fault "/usr/local/bin/keepalived_notify.sh fault"
+}
+
+

@@ -1,0 +1,32 @@
+docs_image: "ekassir.atmdeploydocs:0.1.2.25351154863-1.1-251217.154863"
+ekassir_cardgateway_image: "cardgateway:2.3.1-master-250314.1"
+ekassir_cryptoservice_image: >-
+  {{
+    'ekassir.cryptoservice:2.1.0.24227115439-2.1.0-240814.1' if hardware_security_module == 'Thales' else
+    'cryptoservice.cryptopro:2.1.2.25037128489-2.1.0-250206.0' if hardware_security_module == 'CryptoPro' else
+    'ekassir.cryptoservice:2.1.0.24227115439-2.1.0-240814.1'
+  }}
+ekassir_procgateway_image: >-
+  {{
+    'processinggateway:1.3.2-svfegroup-2.1.0.120381-1.3-241014.1' if card_processing_center == 'SvfeGroupBAdapting' else
+    'processinggateway:1.4.2-compas-1.0.2.132998-main-250321.0' if card_processing_center == 'CompassPlusIsoAdapting' else
+    'processinggateway:1.4.10-way4-2.0.1.140003-main-250616.0' if card_processing_center == 'WayIsoAdapting' else
+    'processinggateway:1.4.10-tcf-3.0.1.7-ek-main-15bf2c6f-250616.1' if card_processing_center == 'TcfAdapting' else
+    'processinggateway:1.3.2-svfegroup-2.1.0.120381-1.3-241014.1'
+  }}
+ekassir_haproxy_image: ekassir.haproxy:2.4.2-alpine
+ekassir_operationhub_tool_image: ekassir.operationhub.tool:2.9.1.25135137468
+ekassir_am_image: ekassir.am.core:5.2.1-v5.2.1-1.0.0.24282119918
+ekassir_cli_am_image: ekassir.am.core:5.2.1-v5.2.1-1.0.0.24282119918
+ekassir_ig_image: identity-gateway-smac:5.4.0.0-master-240925.118700-1.0.24157.6-24317.2
+ekassir_igint_image: identity-gateway-smac:5.4.0.0-master-240925.118700-1.0.24157.6-24317.2
+ekassir_ig_proxy_image: "identity-gateway:5.4.0.0-master-240925.118700"
+ekassir_ig_ui_image: "identity-gateway.ui:5.5.0.0-1.1.1.25062131269-250310.131998"
+ekassir_monitorsrv_image: "ekassir.eph.monitoring_server:5.0.2.4731"
+ekassir_verificationsvc_image: ekassir.eph.verificationservice:3.1.0-testverification-12
+ekassir_ansibledeploy_image: ekassir.operationhubdeploy:0.0.11.122572-main-241114
+ekassir_discoverysvc_image: oh.discoveryservice:3.0.5-152431
+ps_operhub_img:
+  - ekassir.eph.paysystem_server:4.3.0-143895
+ekassir_operhubsvc_migrate_image: ekassir.eph.paysystem_server:4.3.0-143895
+ekassir_rate_image: "ekassir.exsrv.rateservice:1.0.0.3915"

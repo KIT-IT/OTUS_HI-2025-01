@@ -1,0 +1,21 @@
+#!/bin/bash
+# Скрипт проверки здоровья HAProxy для Keepalived
+
+# Проверка процесса HAProxy
+if ! systemctl is-active --quiet haproxy; then
+    exit 1
+fi
+
+# Проверка порта статистики HAProxy
+if ! ss -tlnp | grep -q ":{{ haproxy_stats_port }}"; then
+    exit 1
+fi
+
+# Проверка порта PostgreSQL (если настроен)
+if ! ss -tlnp | grep -q ":{{ haproxy_listen_port }}"; then
+    exit 1
+fi
+
+exit 0
+
+

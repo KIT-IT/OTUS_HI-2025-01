@@ -1,0 +1,145 @@
+groups:
+  - name: system_alerts
+    interval: 10s  # Уменьшено с 30s до 10s
+    rules:
+      # Системные алерты
+      - alert: InstanceDown
+        expr: up == 0
+        for: 30s  # Уменьшено с 1m до 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 30 seconds."
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 2m  # Уменьшено с 5m до 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% on {{ $labels.instance }} for more than 2 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 2m  # Уменьшено с 5m до 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% on {{ $labels.instance }} for more than 2 minutes."
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 2m  # Уменьшено с 5m до 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk space is below 15% on {{ $labels.instance }} (mountpoint: {{ $labels.mountpoint }})"
+
+  - name: postgresql_alerts
+    interval: 10s  # Уменьшено с 30s до 10s
+    rules:
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 30s  # Уменьшено с 1m до 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down on {{ $labels.instance }}"
+          description: "PostgreSQL instance {{ $labels.instance }} is not responding."
+
+      - alert: PostgreSQLTooManyConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections * 100 > 80
+        for: 2m  # Уменьшено с 5m до 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many connections on {{ $labels.instance }}"
+          description: "PostgreSQL on {{ $labels.instance }} has more than 80% of max connections."
+
+      - alert: PostgreSQLReplicationLag
+        expr: pg_replication_lag > 30
+        for: 2m  # Уменьшено с 5m до 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High replication lag on {{ $labels.instance }}"
+          description: "Replication lag is {{ $value }} seconds on {{ $labels.instance }}"
+
+  - name: patroni_alerts
+    interval: 10s  # Уменьшено с 30s до 10s
+    rules:
+      - alert: PatroniNotPrimary
+        expr: patroni_is_primary == 0
+        for: 1m  # Уменьшено с 2m до 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Patroni node {{ $labels.node }} is not primary"
+          description: "Patroni node {{ $labels.node }} is in replica mode (expected primary)."
+
+      - alert: PatroniPrimaryDown
+        expr: sum(patroni_is_primary) == 0
+        for: 30s  # Уменьшено с 1m до 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "No Patroni primary node available"
+          description: "All Patroni nodes are replicas. No primary node is available."
+
+  - name: etcd_alerts
+    interval: 10s  # Уменьшено с 30s до 10s
+    rules:
+      - alert: EtcdNoLeader
+        expr: sum(etcd_is_leader) == 0
+        for: 30s  # Уменьшено с 1m до 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "No etcd leader available"
+          description: "No etcd node is currently the leader."
+
+      - alert: EtcdMultipleLeaders
+        expr: sum(etcd_is_leader) > 1
+        for: 30s  # Уменьшено с 1m до 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple etcd leaders detected"
+          description: "More than one etcd node claims to be the leader. This indicates a split-brain situation."
+
+  - name: haproxy_alerts
+    interval: 10s  # Уменьшено с 30s до 10s
+    rules:
+      - alert: HAProxyNoMaster
+        expr: sum(keepalived_is_master) == 0
+        for: 30s  # Уменьшено с 1m до 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "No HAProxy master available"
+          description: "No HAProxy node has the VIP. All nodes are in backup state."
+
+      - alert: HAProxyMultipleMasters
+        expr: sum(keepalived_is_master) > 1
+        for: 30s  # Уменьшено с 1m до 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple HAProxy masters detected"
+          description: "More than one HAProxy node has the VIP. This indicates a split-brain situation."
+
+  - name: docker_alerts
+    interval: 10s  # Уменьшено с 30s до 10s
+    rules:
+      - alert: DockerServiceDown
+        expr: docker_service_replicas_current < docker_service_replicas_desired
+        for: 2m  # Уменьшено с 5m до 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Docker service {{ $labels.service }} has fewer replicas than desired"
+          description: "Docker service {{ $labels.service }} has {{ $value }} current replicas but {{ $labels.desired }} desired."

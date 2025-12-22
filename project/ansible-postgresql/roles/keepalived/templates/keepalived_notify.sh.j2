@@ -1,0 +1,24 @@
+#!/bin/bash
+# Скрипт уведомлений Keepalived
+
+STATE=$1
+DATE=$(date '+%Y-%m-%d %H:%M:%S')
+
+case $STATE in
+    master)
+        echo "[$DATE] Keepalived: Переход в состояние MASTER" >> /var/log/keepalived.log
+        # Можно добавить дополнительные действия при переходе в master
+        ;;
+    backup)
+        echo "[$DATE] Keepalived: Переход в состояние BACKUP" >> /var/log/keepalived.log
+        # Можно добавить дополнительные действия при переходе в backup
+        ;;
+    fault)
+        echo "[$DATE] Keepalived: Переход в состояние FAULT" >> /var/log/keepalived.log
+        # Можно добавить дополнительные действия при переходе в fault
+        ;;
+esac
+
+exit 0
+
+

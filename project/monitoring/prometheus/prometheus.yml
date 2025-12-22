@@ -1,0 +1,88 @@
+global:
+  scrape_interval: 10s      # Уменьшено с 15s до 10s
+  evaluation_interval: 10s   # Уменьшено с 15s до 10s
+  external_labels:
+    cluster: 'postgresql-ha-cluster'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - '/etc/prometheus/alerts/*.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter - PostgreSQL nodes
+  - job_name: 'node-postgresql'
+    static_configs:
+      - targets:
+        - '192.168.50.21:9100'  # CT 102
+        - '192.168.50.22:9100'  # CT 103
+        - '192.168.50.23:9100'  # CT 104
+        labels:
+          role: 'postgresql'
+
+  # Node Exporter - HAProxy nodes
+  - job_name: 'node-haproxy'
+    static_configs:
+      - targets:
+        - '192.168.50.11:9100'  # CT 100
+        - '192.168.50.12:9100'  # CT 101
+        labels:
+          role: 'haproxy'
+
+  # Node Exporter - etcd nodes
+  - job_name: 'node-etcd'
+    static_configs:
+      - targets:
+        - '192.168.50.51:9100'  # CT 109
+        - '192.168.50.52:9100'  # CT 110
+        - '192.168.50.53:9100'  # CT 111
+        labels:
+          role: 'etcd'
+
+  # Node Exporter - Docker nodes
+  - job_name: 'node-docker'
+    static_configs:
+      - targets:
+        - '192.168.50.31:9100'  # CT 105
+        - '192.168.50.32:9100'  # CT 106
+        - '192.168.50.41:9100'  # CT 107
+        - '192.168.50.42:9100'  # CT 108
+        labels:
+          role: 'docker'
+
+  # PostgreSQL Exporter
+  - job_name: 'postgresql'
+    static_configs:
+      - targets:
+        - '192.168.50.21:9187'  # CT 102
+        - '192.168.50.22:9187'  # CT 103
+        - '192.168.50.23:9187'  # CT 104
+
+  # Patroni REST API
+  - job_name: 'patroni'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+        - '192.168.50.21:8008'  # CT 102
+        - '192.168.50.22:8008'  # CT 103
+        - '192.168.50.23:8008'  # CT 104
+
+  # HAProxy Exporter
+  - job_name: 'haproxy'
+    static_configs:
+      - targets:
+        - '192.168.50.11:9101'  # CT 100
+        - '192.168.50.12:9101'  # CT 101

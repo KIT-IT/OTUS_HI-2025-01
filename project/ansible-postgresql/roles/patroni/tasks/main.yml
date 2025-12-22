@@ -1,0 +1,94 @@
+---
+- name: Остановка PostgreSQL перед настройкой Patroni в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl stop postgresql-18 || true
+  become: yes
+  ignore_errors: yes
+
+- name: Установка Python зависимостей для Patroni в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- dnf install -y --disablerepo="*testing*" python3-pip python3-psycopg2 python3-etcd python3-requests
+  become: yes
+  ignore_errors: yes
+
+- name: Установка Patroni через pip в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- pip3 install patroni[etcd]=={{ patroni_version }}
+  become: yes
+  ignore_errors: yes
+
+- name: Создание директории для конфигурации Patroni в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- mkdir -p {{ patroni_config_dir }}
+    pct exec {{ ct_id }} -- chown {{ patroni_user }}:{{ patroni_user }} {{ patroni_config_dir }}
+  become: yes
+
+- name: Создание конфигурационного файла Patroni в CT {{ ct_id }}
+  template:
+    src: patroni.yml.j2
+    dest: "/tmp/patroni-{{ patroni_name }}.yml"
+  delegate_to: "{{ inventory_hostname }}"
+  become: no
+
+- name: Копирование конфигурационного файла Patroni в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/patroni-{{ patroni_name }}.yml {{ patroni_config_dir }}/patroni.yml
+    pct exec {{ ct_id }} -- chown {{ patroni_user }}:{{ patroni_user }} {{ patroni_config_dir }}/patroni.yml
+  become: yes
+
+- name: Создание systemd сервиса для Patroni в CT {{ ct_id }}
+  template:
+    src: patroni.service.j2
+    dest: "/tmp/patroni.service"
+  delegate_to: localhost
+  become: no
+
+- name: Копирование systemd сервиса в CT {{ ct_id }}
+  shell: |
+    pct push {{ ct_id }} /tmp/patroni.service /etc/systemd/system/patroni.service
+    pct exec {{ ct_id }} -- systemctl daemon-reload
+  become: yes
+
+- name: Отключение автозапуска PostgreSQL в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl disable postgresql-18 || true
+  become: yes
+  ignore_errors: yes
+
+- name: Проверка доступности etcd кластера
+  uri:
+    url: "http://{{ item }}:2379/health"
+    method: GET
+    status_code: [200, 404]
+  loop: "{{ groups['etcd'] | map('extract', hostvars, 'ct_ip') | list }}"
+  register: etcd_health_check
+  changed_when: false
+  ignore_errors: yes
+  delegate_to: localhost
+
+- name: Включение и запуск Patroni в CT {{ ct_id }}
+  shell: |
+    pct exec {{ ct_id }} -- systemctl enable patroni
+    pct exec {{ ct_id }} -- systemctl start patroni
+  become: yes
+
+- name: Ожидание запуска Patroni REST API в CT {{ ct_id }}
+  wait_for:
+    port: "{{ patroni_restapi_port }}"
+    host: "{{ ct_ip }}"
+    delay: 10
+    timeout: 60
+
+- name: Проверка статуса Patroni в CT {{ ct_id }}
+  uri:
+    url: "http://{{ ct_ip }}:{{ patroni_restapi_port }}/patroni"
+    method: GET
+    status_code: 200
+  register: patroni_status
+  changed_when: false
+  ignore_errors: yes
+
+- name: Вывод статуса Patroni
+  debug:
+    msg: "Patroni запущен в CT {{ ct_id }}: {{ patroni_status.json | default('Проверка выполнена') }}"
+
