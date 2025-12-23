@@ -1,0 +1,82 @@
+---
+- name: Deploy Ceph cluster
+  hosts: ceph-cluster
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install prerequisites
+      apt:
+        name:
+          - python3-pip
+          - python3-setuptools
+          - curl
+          - wget
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Add Ceph repository key
+      apt_key:
+        url: https://download.ceph.com/keys/release.asc
+        state: present
+
+    - name: Add Ceph repository
+      apt_repository:
+        repo: "deb https://download.ceph.com/debian-{{ ceph_stable_release }}/ {{ ansible_lsb.codename }} main"
+        state: present
+        filename: ceph
+
+    - name: Update apt cache after adding repository
+      apt:
+        update_cache: yes
+
+    - name: Install Ceph packages on monitors
+      apt:
+        name:
+          - ceph-mon
+          - ceph-mgr
+        state: present
+      when: "'mons' in group_names"
+
+    - name: Install Ceph packages on OSD nodes
+      apt:
+        name:
+          - ceph-osd
+          - ceph-common
+        state: present
+      when: "'osds' in group_names"
+
+    - name: Install Ceph packages on MDS nodes
+      apt:
+        name:
+          - ceph-mds
+          - ceph-common
+        state: present
+      when: "'mdss' in group_names"
+
+    - name: Install Ceph packages on clients
+      apt:
+        name:
+          - ceph-common
+          - ceph-fuse
+        state: present
+      when: "'clients' in group_names"
+
+    - name: Create Ceph directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /etc/ceph
+        - /var/lib/ceph
+        - /var/log/ceph
+

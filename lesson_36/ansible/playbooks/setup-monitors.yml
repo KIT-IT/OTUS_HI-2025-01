@@ -1,0 +1,107 @@
+---
+- name: Setup Ceph Monitors
+  hosts: mons
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Generate cluster UUID
+      set_fact:
+        cluster_uuid: "{{ ansible_date_time.epoch }}"
+
+    - name: Create monitor keyring
+      command: ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+      args:
+        creates: /tmp/ceph.mon.keyring
+      delegate_to: "{{ groups['mons'][0] }}"
+      run_once: true
+
+    - name: Create admin keyring
+      command: ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
+      args:
+        creates: /etc/ceph/ceph.client.admin.keyring
+      delegate_to: "{{ groups['mons'][0] }}"
+      run_once: true
+
+    - name: Add admin key to monitor keyring
+      command: ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+      delegate_to: "{{ groups['mons'][0] }}"
+      run_once: true
+
+    - name: Generate monitor map
+      command: monmaptool --create --add {{ inventory_hostname }} {{ ansible_default_ipv4.address }} --fsid {{ cluster_uuid }} /tmp/monmap
+      delegate_to: "{{ groups['mons'][0] }}"
+      run_once: true
+
+    - name: Add other monitors to map
+      command: monmaptool --add {{ item }} {{ hostvars[item]['ansible_default_ipv4']['address'] }} /tmp/monmap
+      loop: "{{ groups['mons'] }}"
+      when: item != inventory_hostname
+      delegate_to: "{{ groups['mons'][0] }}"
+      run_once: true
+
+    - name: Create monitor data directory
+      file:
+        path: /var/lib/ceph/mon/ceph-{{ inventory_hostname }}
+        state: directory
+        owner: ceph
+        group: ceph
+        mode: '0755'
+
+    - name: Initialize monitor
+      command: ceph-mon --mkfs -i {{ inventory_hostname }} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+      args:
+        creates: /var/lib/ceph/mon/ceph-{{ inventory_hostname }}/keyring
+      when: inventory_hostname == groups['mons'][0]
+
+    - name: Copy monitor files to other monitors
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: ceph
+        group: ceph
+        mode: '0600'
+      loop:
+        - { src: /tmp/monmap, dest: /var/lib/ceph/mon/ceph-{{ inventory_hostname }}/monmap }
+        - { src: /tmp/ceph.mon.keyring, dest: /var/lib/ceph/mon/ceph-{{ inventory_hostname }}/keyring }
+      when: inventory_hostname != groups['mons'][0]
+      delegate_to: "{{ groups['mons'][0] }}"
+
+    - name: Initialize other monitors
+      command: ceph-mon --mkfs -i {{ inventory_hostname }} --monmap /var/lib/ceph/mon/ceph-{{ inventory_hostname }}/monmap --keyring /var/lib/ceph/mon/ceph-{{ inventory_hostname }}/keyring
+      args:
+        creates: /var/lib/ceph/mon/ceph-{{ inventory_hostname }}/keyring
+      when: inventory_hostname != groups['mons'][0]
+
+    - name: Create Ceph configuration file
+      template:
+        src: ceph.conf.j2
+        dest: /etc/ceph/ceph.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy admin keyring to all nodes
+      copy:
+        src: /etc/ceph/ceph.client.admin.keyring
+        dest: /etc/ceph/ceph.client.admin.keyring
+        owner: root
+        group: root
+        mode: '0600'
+      delegate_to: "{{ groups['mons'][0] }}"
+      when: inventory_hostname != groups['mons'][0]
+
+    - name: Start and enable ceph-mon service
+      systemd:
+        name: ceph-mon@{{ inventory_hostname }}
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Wait for monitor to be ready
+      wait_for:
+        port: 6789
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 10
+        timeout: 60
+

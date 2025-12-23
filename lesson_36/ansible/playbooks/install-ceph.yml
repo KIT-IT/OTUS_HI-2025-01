@@ -1,0 +1,85 @@
+---
+- name: Install Ceph packages and prepare cluster
+  hosts: ceph-cluster
+  become: yes
+  gather_facts: yes
+  
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install prerequisites
+      apt:
+        name:
+          - python3-pip
+          - curl
+          - wget
+          - gnupg
+          - lsb-release
+          - ca-certificates
+        state: present
+
+    - name: Add Ceph repository key
+      shell: |
+        wget -q -O- 'https://download.ceph.com/keys/release.asc' | apt-key add -
+      args:
+        creates: /usr/share/keyrings/ceph-release.gpg
+
+    - name: Add Ceph Pacific repository
+      apt_repository:
+        repo: "deb https://download.ceph.com/debian-pacific/ {{ ansible_lsb.codename }} main"
+        state: present
+        filename: ceph-pacific
+
+    - name: Update apt cache after adding repository
+      apt:
+        update_cache: yes
+
+    - name: Install Ceph packages on monitors
+      apt:
+        name:
+          - ceph-mon
+          - ceph-mgr
+          - ceph-common
+        state: present
+      when: "'mons' in group_names"
+
+    - name: Install Ceph packages on OSD nodes
+      apt:
+        name:
+          - ceph-osd
+          - ceph-common
+          - lvm2
+        state: present
+      when: "'osds' in group_names"
+
+    - name: Install Ceph packages on MDS nodes
+      apt:
+        name:
+          - ceph-mds
+          - ceph-common
+        state: present
+      when: "'mdss' in group_names"
+
+    - name: Install Ceph packages on clients
+      apt:
+        name:
+          - ceph-common
+          - ceph-fuse
+        state: present
+      when: "'clients' in group_names"
+
+    - name: Create Ceph directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /etc/ceph
+        - /var/lib/ceph
+        - /var/log/ceph
+

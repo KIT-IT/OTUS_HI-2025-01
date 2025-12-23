@@ -1,0 +1,32 @@
+[global]
+fsid = {{ cluster_uuid }}
+mon initial members = {{ groups['mons'] | join(',') }}
+mon host = {% for host in groups['mons'] %}{{ hostvars[host]['ansible_host'] | default(hostvars[host]['ansible_default_ipv4']['address']) }}{% if not loop.last %},{% endif %}{% endfor %}
+public network = {{ public_network }}
+cluster network = {{ cluster_network }}
+auth cluster required = cephx
+auth service required = cephx
+auth client required = cephx
+osd pool default size = {{ osd_pool_default_size }}
+osd pool default min size = {{ osd_pool_default_min_size }}
+osd pool default pg num = {{ rbd_pool_pg_num }}
+osd pool default pgp num = {{ rbd_pool_pg_num }}
+
+[mon]
+mon data = /var/lib/ceph/mon/$cluster-$id
+mon cluster log file = /var/log/ceph/$cluster.log
+
+[osd]
+osd data = /var/lib/ceph/osd/$cluster-$id
+osd journal size = 1024
+osd pool default pg num = {{ rbd_pool_pg_num }}
+osd pool default pgp num = {{ rbd_pool_pg_num }}
+
+[mds]
+mds data = /var/lib/ceph/mds/$cluster-$id
+
+[client]
+rbd cache = true
+rbd cache size = 33554432
+rbd cache max dirty = 25165824
+

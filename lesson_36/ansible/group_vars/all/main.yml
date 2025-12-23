@@ -1,0 +1,38 @@
+---
+# Ceph configuration
+ceph_origin: repository
+ceph_repository: community
+ceph_stable_release: pacific
+
+# Cluster configuration
+cluster: ceph
+fsid: "{{ cluster_uuid | default('generate') }}"
+
+# Network configuration
+monitor_interface: eth0
+public_network: "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.netmask }}"
+cluster_network: "{{ public_network }}"
+
+# OSD configuration
+osd_scenario: lvm
+osd_objectstore: bluestore
+devices:
+  - /dev/sdb  # Secondary disk для OSD
+
+# Pool configuration
+rbd_pool_pg_num: 64
+rbd_pool_pgp_num: 64
+cephfs_data_pool_pg_num: 32
+cephfs_data_pool_pgp_num: 32
+cephfs_metadata_pool_pg_num: 4
+cephfs_metadata_pool_pgp_num: 4
+
+# Replication
+osd_pool_default_size: 3
+osd_pool_default_min_size: 2
+
+# Client configuration
+cephfs_name: cephfs
+cephfs_data_pool: cephfs_data
+cephfs_metadata_pool: cephfs_metadata
+
