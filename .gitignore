@@ -1,3 +1,7 @@
 myenv
 terraform.tfvars
 .terraform
+
+# Vault binary archives (too large for GitHub)
+lesson_31/vault/*.zip
+vault/*.zip
