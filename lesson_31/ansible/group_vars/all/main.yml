@@ -1,0 +1,16 @@
+---
+k8s_version: "1.29.0"
+pod_network_cidr: "10.244.0.0/16"
+calico_manifest: "https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml"
+ingress_manifest: "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.6/deploy/static/provider/cloud/deploy.yaml"
+
+# На master копируем весь каталог k8s в /opt/k8s
+k8s_root_dir: "/opt/k8s"
+k8s_base_dir: "/opt/k8s/base"
+k8s_web_dir: "/opt/k8s/web"
+k8s_jobs_dir: "/opt/k8s/jobs"
+vault_values_file: "/opt/vault/values.yaml"
+
+# Внешний IP NLB (ручной ввод из `terraform output frontend_lb_ip`)
+vault_db_host: "158.160.176.25"
+

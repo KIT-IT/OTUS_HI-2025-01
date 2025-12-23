@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-index-html
+  namespace: web
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <title>OTUS k8s demo</title>
+      <style>
+        body { font-family: system-ui, sans-serif; background:#0f172a; color:#e5e7eb; margin:0; padding:0; }
+        .wrap { max-width:800px; margin:40px auto; padding:32px; background:#020617; border-radius:12px; box-shadow:0 20px 40px rgba(15,23,42,0.7); }
+        h1 { margin-top:0; font-size:28px; color:#38bdf8; }
+        h2 { font-size:20px; margin-top:24px; color:#eab308; }
+        code { background:#020617; padding:2px 6px; border-radius:4px; }
+        a { color:#38bdf8; text-decoration:none; }
+        a:hover { text-decoration:underline; }
+        .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#022c22; color:#6ee7b7; font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+        .grid { display:grid; grid-template-columns:1.4fr 1fr; gap:24px; margin-top:24px; }
+        @media (max-width: 768px) { .grid { grid-template-columns:1fr; } }
+        .card { padding:16px 18px; border-radius:10px; background:#020617; border:1px solid #1e293b; font-size:14px; }
+        ul { padding-left:20px; }
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <div class="pill">OTUS · Kubernetes · nginx + backend</div>
+        <h1>Demo frontend в Kubernetes (Yandex Cloud)</h1>
+        <p>
+          Этот фронтенд работает в k8s-кластере на Yandex Cloud и отдаётся через nginx, hostPort и внешний Network Load Balancer.
+        </p>
+        <div class="grid">
+          <div class="card">
+            <h2>Что развёрнуто</h2>
+            <ul>
+              <li><b>frontend</b> — nginx, раздаёт эту страницу</li>
+              <li><b>backend</b> — echo‑сервер (<code>ealen/echo-server</code>)</li>
+              <li><b>postgres</b> — демо БД для Vault</li>
+              <li><b>доступ</b> — Yandex NLB → hostPort 30080 на воркерах</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h2>Проверка backend</h2>
+            <p>С этого же <b>lb_ip</b> можно вызвать backend:</p>
+            <code>curl http://&lt;lb_ip&gt;/api/</code>
+          </div>
+        </div>
+        <p style="margin-top:32px; font-size:13px; color:#9ca3af;">
+          Конфигурация разворачивается Terraform + Ansible. Манифесты лежат в каталоге <code>lesson_31/k8s</code>.
+        </p>
+      </div>
+    </body>
+    </html>
+
+

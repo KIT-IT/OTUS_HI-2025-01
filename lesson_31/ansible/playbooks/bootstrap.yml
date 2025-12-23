@@ -1,0 +1,17 @@
+---
+- hosts: master
+  become: true
+  vars:
+    k8s_version: "1.29.0"
+  roles:
+    - role: common
+    - role: k8s-master
+
+- hosts: worker
+  become: true
+  vars:
+    k8s_version: "1.29.0"
+  roles:
+    - role: common
+    - role: k8s-worker
+

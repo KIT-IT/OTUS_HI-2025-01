@@ -1,0 +1,96 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-etcd
+  namespace: kube-system
+spec:
+  schedule: "0 */12 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostNetwork: true
+          restartPolicy: OnFailure
+          tolerations:
+            - key: "node-role.kubernetes.io/control-plane"
+              operator: "Exists"
+              effect: "NoSchedule"
+            - key: "node-role.kubernetes.io/master"
+              operator: "Exists"
+              effect: "NoSchedule"
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: Exists
+          containers:
+            - name: etcd-backup
+              image: bitnami/etcd:3.5
+              env:
+                - name: ETCDCTL_API
+                  value: "3"
+                - name: ETCDCTL_CACERT
+                  value: /etc/kubernetes/pki/etcd/ca.crt
+                - name: ETCDCTL_CERT
+                  value: /etc/kubernetes/pki/etcd/healthcheck-client.crt
+                - name: ETCDCTL_KEY
+                  value: /etc/kubernetes/pki/etcd/healthcheck-client.key
+                - name: ETCDCTL_ENDPOINTS
+                  value: https://127.0.0.1:2379
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-s3
+                      key: access_key
+                      optional: true
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-s3
+                      key: secret_key
+                      optional: true
+                - name: AWS_DEFAULT_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-s3
+                      key: region
+                      optional: true
+                - name: S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-s3
+                      key: bucket
+                      optional: true
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  ts=$(date +%Y%m%d-%H%M%S)
+                  SNAP=/backup/etcd-${ts}.db
+                  etcdctl snapshot save ${SNAP}
+                  echo "Saved snapshot to ${SNAP}"
+                  if [ -n "$S3_BUCKET" ] && [ -n "$AWS_ACCESS_KEY_ID" ]; then
+                    apt-get update -qq && apt-get install -y -qq awscli
+                    aws s3 cp ${SNAP} s3://${S3_BUCKET}/
+                    echo "Uploaded to s3://${S3_BUCKET}/"
+                  else
+                    echo "S3 creds not set, skipping upload"
+                  fi
+              volumeMounts:
+                - name: etcd-certs
+                  mountPath: /etc/kubernetes/pki/etcd
+                  readOnly: true
+                - name: etcd-backup
+                  mountPath: /backup
+          volumes:
+            - name: etcd-certs
+              hostPath:
+                path: /etc/kubernetes/pki/etcd
+                type: Directory
+            - name: etcd-backup
+              hostPath:
+                path: /var/lib/etcd/backups
+                type: DirectoryOrCreate
+

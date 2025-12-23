@@ -1,0 +1,11 @@
+---
+- name: Reload sysctl
+  command: sysctl --system
+  listen: Reload sysctl
+
+- name: Restart containerd
+  service:
+    name: containerd
+    state: restarted
+  listen: Restart containerd
+

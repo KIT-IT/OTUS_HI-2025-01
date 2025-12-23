@@ -1,0 +1,19 @@
+server:
+  # Demo/dev: single node, raft storage, dev token set
+  ha:
+    enabled: false
+  dataStorage:
+    enabled: true
+    size: 5Gi
+  dev:
+    enabled: true
+    devRootToken: "root"
+  ingress:
+    enabled: false
+
+ui:
+  enabled: true
+
+csi:
+  enabled: false
+

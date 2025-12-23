@@ -1,0 +1,7 @@
+---
+- name: Join worker to cluster
+  command: "{{ hostvars[groups['master'][0]].join_command }} --ignore-preflight-errors=all"
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  when: hostvars[groups['master'][0]].join_command is defined
+

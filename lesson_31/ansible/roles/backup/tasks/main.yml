@@ -1,0 +1,6 @@
+---
+- name: Apply backup CronJobs/manifests
+  command: kubectl apply -f {{ k8s_jobs_dir }}
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+

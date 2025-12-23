@@ -1,0 +1,53 @@
+---
+- name: Wait for ingress-nginx controller to be ready
+  command: kubectl wait --namespace ingress-nginx --for=condition=available deployment/ingress-nginx-controller --timeout=300s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Apply web configmap
+  command: kubectl apply -f {{ k8s_web_dir }}/configmap-frontend.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Apply backend deployment
+  command: kubectl apply -f {{ k8s_web_dir }}/deployment-backend.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Apply backend service
+  command: kubectl apply -f {{ k8s_web_dir }}/service-backend.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Apply frontend deployment
+  command: kubectl apply -f {{ k8s_web_dir }}/deployment-frontend.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Apply frontend service
+  command: kubectl apply -f {{ k8s_web_dir }}/service-frontend.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Apply postgres manifests
+  command: kubectl apply -f {{ k8s_web_dir }}/postgres.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Apply ingress (non-fatal if webhook not ready)
+  command: kubectl apply -f {{ k8s_web_dir }}/ingress.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: ingress_apply
+  failed_when: false
+
+- name: Restart frontend deployment to pick up new config
+  command: kubectl -n web rollout restart deploy/frontend
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Wait for frontend deployment ready
+  command: kubectl -n web rollout status deploy/frontend --timeout=180s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+

@@ -1,0 +1,9 @@
+---
+- hosts: master
+  become: true
+  vars:
+    k8s_namespace: web
+  roles:
+    - role: app-base
+    - role: app-web
+

@@ -1,0 +1,143 @@
+---
+- name: Ensure unzip installed
+  apt:
+    name: unzip
+    state: present
+    update_cache: true
+
+- name: Copy Vault binary archive from controller
+  copy:
+    src: "{{ playbook_dir }}/../../vault/vault_1.21.1_linux_amd64.zip"
+    dest: /tmp/vault_1.21.1_linux_amd64.zip
+    mode: "0644"
+
+- name: Unpack Vault binary
+  unarchive:
+    src: /tmp/vault_1.21.1_linux_amd64.zip
+    dest: /usr/local/bin
+    remote_src: true
+  args:
+    creates: /usr/local/bin/vault
+
+- name: Ensure Vault binary is executable
+  file:
+    path: /usr/local/bin/vault
+    mode: "0755"
+
+- name: Create vault user
+  user:
+    name: vault
+    system: true
+    shell: /usr/sbin/nologin
+  ignore_errors: true
+
+- name: Create Vault config and data dirs
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: vault
+    group: vault
+    mode: "0755"
+  loop:
+    - /etc/vault.d
+    - /var/lib/vault
+
+- name: Create Vault dev-config (for demo, dev server with root token)
+  copy:
+    dest: /etc/vault.d/vault-dev.env
+    owner: vault
+    group: vault
+    mode: "0644"
+    content: |
+      VAULT_DEV_ROOT_TOKEN_ID=root
+      VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+
+- name: Create systemd unit for Vault dev server
+  copy:
+    dest: /etc/systemd/system/vault.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=HashiCorp Vault (dev mode)
+      Requires=network-online.target
+      After=network-online.target
+
+      [Service]
+      User=vault
+      Group=vault
+      EnvironmentFile=/etc/vault.d/vault-dev.env
+      ExecStart=/usr/local/bin/vault server -dev -dev-root-token-id=${VAULT_DEV_ROOT_TOKEN_ID} -dev-listen-address=${VAULT_DEV_LISTEN_ADDRESS}
+      Restart=on-failure
+      LimitNOFILE=65536
+      CapabilityBoundingSet=CAP_IPC_LOCK
+      AmbientCapabilities=CAP_IPC_LOCK
+      SecureBits=keep-caps
+      NoNewPrivileges=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Reload systemd and start Vault
+  systemd:
+    name: vault
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Wait for Vault HTTP to be available
+  uri:
+    url: http://127.0.0.1:8200/v1/sys/health
+    status_code: 200
+  register: vault_health
+  retries: 20
+  delay: 3
+  until: vault_health.status == 200
+
+- name: Get postgres password from secret
+  command: kubectl -n web get secret postgres-secret -o jsonpath='{.data.postgres-password}'
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: pg_pass_b64
+  changed_when: false
+  failed_when: pg_pass_b64.stdout == ""
+
+- name: Set fact postgres_password
+  set_fact:
+    postgres_password: "{{ pg_pass_b64.stdout | b64decode }}"
+
+- name: Set fact postgres_host (use external NLB IP)
+  set_fact:
+    postgres_host: "{{ vault_db_host }}"
+
+- name: Enable database secrets engine in Vault
+  shell: |
+    VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root \
+    vault secrets enable database || true
+  args:
+    creates: /var/lib/vault/db-engine-enabled
+  register: vault_db_enable
+  changed_when: false
+
+- name: Configure Vault database connection for Postgres
+  shell: |
+    VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root \
+    vault write database/config/appdb \
+      plugin_name=postgresql-database-plugin \
+      allowed_roles=app-role \
+      connection_url="postgresql://{{ '{{' }}username{{ '}}' }}:{{ '{{' }}password{{ '}}' }}@{{ postgres_host }}:5432/appdb" \
+      username="postgres" \
+      password="{{ postgres_password }}"
+  register: vault_db_cfg
+  changed_when: "'Success' in vault_db_cfg.stdout or 'success' in vault_db_cfg.stdout"
+
+- name: Configure Vault DB role with TTL 2m
+  shell: |
+    VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root \
+    vault write database/roles/app-role \
+      db_name=appdb \
+      creation_statements="CREATE ROLE \"{{ '{{name}}' }}\" WITH LOGIN PASSWORD '{{ '{{password}}' }}' VALID UNTIL '{{ '{{expiration}}' }}'; GRANT CONNECT ON DATABASE appdb TO \"{{ '{{name}}' }}\";" \
+      default_ttl="120s" \
+      max_ttl="300s"
+  register: vault_db_role
+  changed_when: "'Success' in vault_db_role.stdout or 'success' in vault_db_role.stdout"
+
